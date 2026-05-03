@@ -1,0 +1,278 @@
+<Window x:Class="InfoTransfer.PushConfigWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:InfoTransfer"
+        Title="推送设置"
+        Height="550" Width="1000"
+        WindowStartupLocation="CenterOwner"
+        Background="#F0F2F5">
+    <Window.Resources>
+        <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#1890FF"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#40A9FF"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#D9D9D9"/>
+                    <Setter Property="Foreground" Value="#999"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DangerButton" TargetType="Button">
+            <Setter Property="Background" Value="#FF4D4F"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#FF7875"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#D9D9D9"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#52C41A"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#73D13D"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#D9D9D9"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="ListBoxItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="BorderBrush" Value="#E8E8E8"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#E6F7FF"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#F5F5F5"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 顶部标题栏 -->
+        <Border Grid.Row="0" Background="White" Padding="16">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="推送设置" FontSize="16" FontWeight="Bold" VerticalAlignment="Center"/>
+                <TextBlock Text="  |  从左侧和右侧选择账号和消息源，点击「创建组合」添加推送规则"
+                           VerticalAlignment="Center" Foreground="#999" FontSize="13" Margin="12,0,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 中部内容区 -->
+        <Grid Grid.Row="1" Margin="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="220"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 左侧：账号列表（消息体） -->
+            <Border Grid.Column="0" Background="White" CornerRadius="8">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" BorderBrush="#E8E8E8" BorderThickness="0,0,0,1" Padding="16">
+                        <TextBlock Text="消息体（账号）" FontSize="15" FontWeight="Bold" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <ListBox x:Name="AccountList" Grid.Row="1"
+                             ItemContainerStyle="{StaticResource ListBoxItemStyle}"
+                             BorderThickness="0" Background="Transparent"
+                             SelectionChanged="AccountList_SelectionChanged">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding TerminalId}" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock Text="{Binding Description}" FontSize="11" Foreground="#999" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <!-- 中间：组合列表 -->
+            <Border Grid.Column="2" Background="White" CornerRadius="8">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 标题和操作 -->
+                    <Border Grid.Row="0" BorderBrush="#E8E8E8" BorderThickness="0,0,0,1" Padding="16">
+                        <StackPanel>
+                            <TextBlock Text="推送组合" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,0,12"/>
+                            <StackPanel Orientation="Horizontal">
+                                <CheckBox x:Name="ChkEnableText" Content="文本" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                                <CheckBox x:Name="ChkEnableImage" Content="图片" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                                <Button x:Name="BtnCreateCombination" Content="创建组合" Style="{StaticResource PrimaryButton}"
+                                        Click="BtnCreateCombination_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 提示 -->
+                    <Border Grid.Row="1" Background="#FFF7E6" Padding="12" Margin="12,12,12,0" CornerRadius="4">
+                        <TextBlock Text="选择一个账号和一个消息源后，点击「创建组合」添加推送规则"
+                                   FontSize="12" Foreground="#FA8C16" TextWrapping="Wrap"/>
+                    </Border>
+
+                    <!-- 组合列表 -->
+                    <ListBox x:Name="CombinationList" Grid.Row="2"
+                             ItemContainerStyle="{StaticResource ListBoxItemStyle}"
+                             BorderThickness="0" Background="Transparent"
+                             Margin="0,12,0,0"
+                             SelectionChanged="CombinationList_SelectionChanged">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="14"/>
+                                            <Border Background="#E6F7FF" CornerRadius="2" Padding="4,2" Margin="8,0,0,0"
+                                                    Visibility="{Binding EnableText, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBlock Text="文本" FontSize="10" Foreground="#1890FF"/>
+                                            </Border>
+                                            <Border Background="#FFF7E6" CornerRadius="2" Padding="4,2" Margin="4,0,0,0"
+                                                    Visibility="{Binding EnableImage, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                <TextBlock Text="图片" FontSize="10" Foreground="#FA8C16"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Content="删除" Style="{StaticResource DangerButton}"
+                                            Tag="{Binding Id}" Click="BtnDeleteCombination_Click"
+                                            VerticalAlignment="Center"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <!-- 右侧：消息源列表 -->
+            <Border Grid.Column="4" Background="White" CornerRadius="8">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" BorderBrush="#E8E8E8" BorderThickness="0,0,0,1" Padding="16">
+                        <TextBlock Text="消息源" FontSize="15" FontWeight="Bold" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <ListBox x:Name="SourceList" Grid.Row="1"
+                             ItemContainerStyle="{StaticResource ListBoxItemStyle}"
+                             BorderThickness="0" Background="Transparent"
+                             SelectionChanged="SourceList_SelectionChanged">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock Text="{Binding SourceId}" FontSize="11" Foreground="#999" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- 底部按钮栏 -->
+        <Border Grid.Row="2" Background="White" Padding="16">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="关闭" Padding="24,10"
+                        Background="#F0F0F0" BorderThickness="0" Click="BtnClose_Click" Cursor="Hand"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

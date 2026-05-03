@@ -1,0 +1,336 @@
+<Window x:Class="InfoTransfer.MessageSourceConfigWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="消息源设置"
+        Height="600" Width="900"
+        WindowStartupLocation="CenterOwner"
+        Background="#F0F2F5">
+    <Window.Resources>
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#1890FF"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#40A9FF"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#D9D9D9"/>
+                    <Setter Property="Foreground" Value="#999"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DangerButton" TargetType="Button">
+            <Setter Property="Background" Value="#FF4D4F"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#FF7875"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#D9D9D9"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#52C41A"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="24,10"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#73D13D"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#D9D9D9"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="ListBoxItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="BorderBrush" Value="#E8E8E8"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#E6F7FF"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#F5F5F5"/>
+                </Trigger>
+                <MultiTrigger>
+                    <MultiTrigger.Conditions>
+                        <Condition Property="IsSelected" Value="True"/>
+                        <Condition Property="IsMouseOver" Value="True"/>
+                    </MultiTrigger.Conditions>
+                    <Setter Property="Background" Value="#BAE7FF"/>
+                </MultiTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="BorderBrush" Value="#D9D9D9"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="#1890FF"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#F5F5F5"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 顶部按钮栏 -->
+        <Border Grid.Row="0" Background="White" Padding="16">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="BtnAdd" Content="添加" Style="{StaticResource PrimaryButton}"
+                        Click="BtnAdd_Click" Margin="0,0,8,0"/>
+                <Button x:Name="BtnEdit" Content="修改" Style="{StaticResource SecondaryButton}"
+                        Click="BtnEdit_Click" IsEnabled="False" Margin="0,0,8,0"/>
+                <Button x:Name="BtnDelete" Content="删除" Style="{StaticResource DangerButton}"
+                        Click="BtnDelete_Click" IsEnabled="False"/>
+                <TextBlock x:Name="TxtStatus" Text="请选择或添加消息源" VerticalAlignment="Center"
+                           Foreground="#999" FontSize="13" Margin="20,0,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 中部内容区 -->
+        <Grid Grid.Row="1" Margin="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 左侧：消息源列表 -->
+            <Border Grid.Column="0" Background="White" CornerRadius="8">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" BorderBrush="#E8E8E8" BorderThickness="0,0,0,1" Padding="16">
+                        <TextBlock Text="消息源列表" FontSize="15" FontWeight="Bold" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <ListBox x:Name="SourceList" Grid.Row="1"
+                             ItemContainerStyle="{StaticResource ListBoxItemStyle}"
+                             BorderThickness="0" Background="Transparent"
+                             SelectionChanged="SourceList_SelectionChanged">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock Text="{Binding SourceId}" FontSize="11" Foreground="#999" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+
+            <!-- 右侧：编辑区 -->
+            <Border Grid.Column="2" Background="White" CornerRadius="8" Padding="24">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,20">
+                        <TextBlock Text="消息源配置" FontSize="18" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtCurrentSource" Text="" FontSize="14" Foreground="#999"
+                                   VerticalAlignment="Center" Margin="12,0,0,0"/>
+                    </StackPanel>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="EditPanel">
+                            <!-- Source ID -->
+                            <StackPanel Margin="0,0,0,16">
+                                <TextBlock Text="Source ID" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBox x:Name="TxtSourceId" MaxLength="50" IsEnabled="False"/>
+                                <TextBlock Text="唯一标识消息源的ID，用于定位推送消息" FontSize="11" Foreground="#999" Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <!-- 名称 -->
+                            <StackPanel Margin="0,0,0,16">
+                                <TextBlock Text="名称" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBox x:Name="TxtName" MaxLength="100" IsEnabled="False"/>
+                                <TextBlock Text="消息源的显示名称" FontSize="11" Foreground="#999" Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <!-- API 调用信息 -->
+                            <Border Background="#FFF7E6" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="API 调用信息" FontWeight="Bold" FontSize="14" Foreground="#FA8C16" Margin="0,0,0,12"/>
+
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="120"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="请求方法:" VerticalAlignment="Center"/>
+                                        <ComboBox x:Name="CmbApiMethod" Grid.Column="1" IsEnabled="False">
+                                            <ComboBoxItem Content="GET"/>
+                                            <ComboBoxItem Content="POST"/>
+                                            <ComboBoxItem Content="PUT"/>
+                                            <ComboBoxItem Content="DELETE"/>
+                                        </ComboBox>
+                                    </Grid>
+
+                                    <StackPanel Margin="0,0,0,12">
+                                        <TextBlock Text="API 地址" FontWeight="Medium" Margin="0,0,0,8"/>
+                                        <TextBox x:Name="TxtApiUrl" IsEnabled="False"/>
+                                    </StackPanel>
+
+                                    <StackPanel Margin="0,0,0,12">
+                                        <TextBlock Text="请求参数" FontWeight="Medium" Margin="0,0,0,8"/>
+                                        <TextBox x:Name="TxtApiParameters" TextWrapping="Wrap" AcceptsReturn="True"
+                                                 Height="100" FontFamily="Consolas" IsEnabled="False"/>
+                                        <TextBlock Text="JSON格式，如: {&quot;key&quot;: &quot;value&quot;}" FontSize="11" Foreground="#666" Margin="0,4,0,0"/>
+                                    </StackPanel>
+
+                                    <StackPanel Margin="0,0,0,12">
+                                        <TextBlock Text="API Token (Bearer)" FontWeight="Medium" Margin="0,0,0,8"/>
+                                        <TextBox x:Name="TxtApiToken" IsEnabled="False"/>
+                                        <TextBlock Text="如需要认证的API，请填写Bearer Token" FontSize="11" Foreground="#666" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- 返回格式 -->
+                            <Border Background="#E6F7FF" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="返回格式" FontWeight="Bold" FontSize="14" Foreground="#1890FF" Margin="0,0,0,12"/>
+                                    <TextBox x:Name="TxtResponseFormat" TextWrapping="Wrap" AcceptsReturn="True"
+                                             Height="120" FontFamily="Consolas" IsEnabled="False"/>
+                                    <TextBlock Text="JSON格式，描述API返回的数据结构" FontSize="11" Foreground="#666" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- 描述 -->
+                            <StackPanel Margin="0,0,0,16">
+                                <TextBlock Text="描述" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBox x:Name="TxtDescription" TextWrapping="Wrap" AcceptsReturn="True"
+                                         Height="60" IsEnabled="False"/>
+                            </StackPanel>
+
+                            <!-- 操作按钮 -->
+                            <StackPanel x:Name="EditButtonGroup" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0" Visibility="Collapsed">
+                                <Button x:Name="BtnSave" Content="保存" Style="{StaticResource SecondaryButton}"
+                                        Click="BtnSave_Click" Margin="0,0,8,0"/>
+                                <Button x:Name="BtnCancel" Content="取消" Style="{StaticResource PrimaryButton}"
+                                        Background="#999" Click="BtnCancel_Click"/>
+                            </StackPanel>
+
+                            <!-- 帮助提示 -->
+                            <Border Background="#F6FFED" CornerRadius="6" Padding="12" Margin="0,16,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="提示:" FontWeight="Bold" Foreground="#52C41A"/>
+                                    <TextBlock Text="点击「添加」创建新消息源，点击「修改」编辑选中消息源" FontSize="12" Foreground="#52C41A" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- 空状态提示 -->
+                    <TextBlock x:Name="TxtEmptyHint" Grid.Row="1" Text="请从左侧列表选择消息源，或点击「添加」创建新消息源"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Foreground="#999" FontSize="14"/>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- 底部按钮栏 -->
+        <Border Grid.Row="2" Background="White" Padding="16">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="关闭" Padding="24,10"
+                        Background="#F0F0F0" BorderThickness="0" Click="BtnClose_Click" Cursor="Hand"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

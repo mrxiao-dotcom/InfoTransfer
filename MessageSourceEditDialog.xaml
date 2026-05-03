@@ -1,0 +1,143 @@
+<Window x:Class="InfoTransfer.MessageSourceEditDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="添加/编辑消息源"
+        Height="500" Width="500"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="#F0F2F5">
+    <Window.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="BorderBrush" Value="#D9D9D9"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="#1890FF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#1890FF"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="24,10"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#40A9FF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <StackPanel Margin="0,0,0,16">
+                    <TextBlock Text="Source ID" FontWeight="Bold" Margin="0,0,0,8"/>
+                    <TextBox x:Name="TxtSourceId" MaxLength="50"/>
+                    <TextBlock Text="唯一标识消息源的ID" FontSize="11" Foreground="#999" Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <StackPanel Margin="0,0,0,16">
+                    <TextBlock Text="名称" FontWeight="Bold" Margin="0,0,0,8"/>
+                    <TextBox x:Name="TxtName" MaxLength="100"/>
+                </StackPanel>
+
+                <Border Background="#FFF7E6" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="API 调用信息" FontWeight="Bold" FontSize="14" Foreground="#FA8C16" Margin="0,0,0,12"/>
+
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="请求方法:" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CmbApiMethod" Grid.Column="1">
+                                <ComboBoxItem Content="GET" IsSelected="True"/>
+                                <ComboBoxItem Content="POST"/>
+                                <ComboBoxItem Content="PUT"/>
+                                <ComboBoxItem Content="DELETE"/>
+                            </ComboBox>
+                        </Grid>
+
+                        <StackPanel Margin="0,0,0,12">
+                            <TextBlock Text="API 地址" FontWeight="Medium" Margin="0,0,0,8"/>
+                            <TextBox x:Name="TxtApiUrl"/>
+                        </StackPanel>
+
+                        <StackPanel Margin="0,0,0,12">
+                            <TextBlock Text="请求参数 (JSON)" FontWeight="Medium" Margin="0,0,0,8"/>
+                            <TextBox x:Name="TxtApiParameters" TextWrapping="Wrap" AcceptsReturn="True"
+                                     Height="80" FontFamily="Consolas"/>
+                            <TextBlock Text='如: {"key": "value"}' FontSize="11" Foreground="#666" Margin="0,4,0,0"/>
+                        </StackPanel>
+
+                        <StackPanel Margin="0,0,0,12">
+                            <TextBlock Text="API Token (Bearer)" FontWeight="Medium" Margin="0,0,0,8"/>
+                            <TextBox x:Name="TxtApiToken"/>
+                            <TextBlock Text="如需要认证的API，请填写Bearer Token" FontSize="11" Foreground="#666" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="#E6F7FF" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="返回格式 (JSON)" FontWeight="Bold" FontSize="14" Foreground="#1890FF" Margin="0,0,0,12"/>
+                        <TextBox x:Name="TxtResponseFormat" TextWrapping="Wrap" AcceptsReturn="True"
+                                 Height="80" FontFamily="Consolas"/>
+                        <TextBlock Text="描述API返回的数据结构" FontSize="11" Foreground="#666" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Margin="0,0,0,16">
+                    <TextBlock Text="描述" FontWeight="Bold" Margin="0,0,0,8"/>
+                    <TextBox x:Name="TxtDescription" TextWrapping="Wrap" AcceptsReturn="True" Height="60"/>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="取消" Padding="24,10" Margin="0,0,12,0"
+                    Background="#F0F0F0" BorderThickness="0" Click="BtnCancel_Click" Cursor="Hand"/>
+            <Button Content="确定" Style="{StaticResource PrimaryButton}" Click="BtnOK_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
