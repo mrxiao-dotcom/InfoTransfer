@@ -39,6 +39,20 @@ public class FeishuPushService : IDisposable
     {
         if (_isRunning) return;
 
+        // 启动时清理前一天的消息记录
+        var yesterdayCount = _databaseService.CleanupYesterdayMessages();
+        if (yesterdayCount > 0)
+        {
+            Log("INFO", $"已清理 {yesterdayCount} 条昨日消息记录");
+        }
+
+        // 启动时清理过期的未推送消息（超过30分钟时效性）
+        var cleanedCount = _databaseService.CleanupExpiredMessages();
+        if (cleanedCount > 0)
+        {
+            Log("INFO", $"已清理 {cleanedCount} 条过期未推送消息");
+        }
+
         var config = _configService.Config.FeishuPushConfig;
         var intervalMs = config.ScanIntervalSeconds * 1000;
 
@@ -150,7 +164,14 @@ public class FeishuPushService : IDisposable
         }
 
         string content;
-        if (!string.IsNullOrWhiteSpace(message.SourceId))
+        
+        // GD 策略信号使用 Body 中的内容（已在 GDSignalConfigWindow 中格式化）
+        if (message.MessageType == "GD_Signal" && !string.IsNullOrWhiteSpace(message.Body))
+        {
+            content = message.Body;
+            Log("INFO", $"使用 GD 策略消息 Body 作为推送内容");
+        }
+        else if (!string.IsNullOrWhiteSpace(message.SourceId))
         {
             Log("INFO", $"[推送] 开始获取消息源数据，SourceId='{message.SourceId}'");
             var fetchResult = await _messageSourceService.FetchAndFormatMessageAsync(message.SourceId, "text");
@@ -168,7 +189,7 @@ public class FeishuPushService : IDisposable
         }
         else
         {
-            content = $"收到消息请求 - Terminal: {message.TerminalId}, Method: {message.Method}";
+            content = message.Body ?? $"收到消息请求 - Terminal: {message.TerminalId}, Method: {message.Method}";
         }
 
         return SendTextMessage(terminalConfig.TextWebhook, content);

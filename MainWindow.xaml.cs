@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using Microsoft.Win32;
 using InfoTransfer.Services;
 using InfoTransfer.Models;
 
@@ -19,12 +18,9 @@ public partial class MainWindow : Window
     private readonly ApiServerService _apiServerService;
     private readonly FeishuPushService _pushService;
     private readonly DataPushService _dataPushService;
-    private readonly ObservableCollection<FeishuMessage> _messages;
     private readonly ObservableCollection<ActivityItem> _activities;
-    private FeishuMessage? _currentMessage;
     private System.Timers.Timer? _statusUpdateTimer;
     private System.Timers.Timer? _activityUpdateTimer;
-    private bool _isEditMode;
     private DateTime _lastActivityCheck = DateTime.MinValue;
     private readonly int _maxLogLines = 1000;
 
@@ -41,9 +37,6 @@ public partial class MainWindow : Window
         _apiServerService = new ApiServerService(_databaseService);
         _pushService = new FeishuPushService(_databaseService, _configService);
         _dataPushService = new DataPushService(_databaseService);
-
-        _messages = new ObservableCollection<FeishuMessage>();
-        MessageListBox.ItemsSource = _messages;
 
         _activities = new ObservableCollection<ActivityItem>();
         ActivityListBox.ItemsSource = _activities;
@@ -66,8 +59,6 @@ public partial class MainWindow : Window
         _activityUpdateTimer.Start();
 
         LoadConfigToUI();
-        LoadTerminalComboBox();
-        LoadMessages();
         UpdateStatusDisplay();
         LoadRecentActivities();
 
@@ -129,32 +120,6 @@ public partial class MainWindow : Window
     private void LoadConfigToUI()
     {
         TxtServerUrl.Text = $"API地址: http://localhost:{_configService.Config.ServerConfig.Port}";
-    }
-
-    private void LoadTerminalComboBox()
-    {
-        CmbTerminalId.Items.Clear();
-        foreach (var config in _configService.Config.FeishuPushConfig.Configs)
-        {
-            CmbTerminalId.Items.Add(config.TerminalId);
-        }
-        if (CmbTerminalId.Items.Count > 0)
-        {
-            CmbTerminalId.SelectedIndex = 0;
-        }
-    }
-
-    private void LoadMessages()
-    {
-        _messages.Clear();
-        var messages = _databaseService.GetRecentMessages(100);
-        foreach (var msg in messages)
-        {
-            _messages.Add(msg);
-        }
-        TxtNoMessage.Visibility = _messages.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        MessageEditPanel.IsEnabled = false;
-        TxtMessageBody.Text = "";
     }
 
     private void Service_OnLog(object? sender, Models.LogEntry e)
@@ -273,10 +238,7 @@ public partial class MainWindow : Window
     {
         var configWindow = new FeishuConfigWindow(_configService);
         configWindow.Owner = this;
-        if (configWindow.ShowDialog() == true)
-        {
-            LoadTerminalComboBox();
-        }
+        configWindow.ShowDialog();
     }
 
     private void BtnMessageSource_Click(object sender, RoutedEventArgs e)
@@ -300,6 +262,28 @@ public partial class MainWindow : Window
         taskWindow.ShowDialog();
     }
 
+    private void BtnGDSignalConfig_Click(object sender, RoutedEventArgs e)
+    {
+        var gdWindow = new GDSignalConfigWindow(_databaseService, _configService, AddLog);
+        gdWindow.Owner = this;
+        gdWindow.ShowDialog();
+    }
+
+    private void BtnGDSignalMonitor_Click(object sender, RoutedEventArgs e)
+    {
+        // 直接打开配置窗口并自动启动监控
+        var gdWindow = new GDSignalConfigWindow(_databaseService, _configService, AddLog);
+        gdWindow.Owner = this;
+        
+        // 在窗口加载完成后自动启动监控
+        gdWindow.Loaded += (s, args) =>
+        {
+            gdWindow.StartMonitoring();
+        };
+        
+        gdWindow.ShowDialog();
+    }
+
     private void BtnClearLog_Click(object sender, RoutedEventArgs e)
     {
         LogTextBox.Text = "";
@@ -307,136 +291,7 @@ public partial class MainWindow : Window
 
     private void BtnRefreshMessages_Click(object sender, RoutedEventArgs e)
     {
-        LoadMessages();
         LoadRecentActivities();
-    }
-
-    private void MessageListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (MessageListBox.SelectedItem is FeishuMessage selected)
-        {
-            _currentMessage = selected;
-            TxtNoMessage.Visibility = Visibility.Collapsed;
-
-            MessageInfoPanel.Visibility = Visibility.Visible;
-            TerminalSelectPanel.Visibility = Visibility.Visible;
-            MessageBodyPanel.Visibility = Visibility.Visible;
-            ButtonPanel.Visibility = Visibility.Visible;
-
-            TxtMessageId.Text = $"ID: {selected.Id}";
-
-            CmbTerminalId.SelectedItem = selected.TerminalId;
-            TxtMessageBody.Text = selected.Body;
-            TxtMessageBody.IsEnabled = false;
-
-            EditButtonGroup.Visibility = Visibility.Visible;
-            SaveButtonGroup.Visibility = Visibility.Collapsed;
-
-            _isEditMode = false;
-        }
-        else
-        {
-            _currentMessage = null;
-            TxtNoMessage.Visibility = Visibility.Visible;
-
-            MessageInfoPanel.Visibility = Visibility.Collapsed;
-            TerminalSelectPanel.Visibility = Visibility.Collapsed;
-            MessageBodyPanel.Visibility = Visibility.Collapsed;
-            ButtonPanel.Visibility = Visibility.Collapsed;
-        }
-    }
-
-    private void BtnEditMessage_Click(object sender, RoutedEventArgs e)
-    {
-        if (_currentMessage == null)
-        {
-            MessageBox.Show("请先选择一条消息", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        _isEditMode = true;
-        TxtMessageBody.IsEnabled = true;
-        EditButtonGroup.Visibility = Visibility.Collapsed;
-        SaveButtonGroup.Visibility = Visibility.Visible;
-    }
-
-    private void BtnSaveMessage_Click(object sender, RoutedEventArgs e)
-    {
-        if (_currentMessage == null)
-        {
-            MessageBox.Show("请先选择一条消息", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        var terminalId = CmbTerminalId.SelectedItem?.ToString();
-        if (string.IsNullOrWhiteSpace(terminalId))
-        {
-            MessageBox.Show("请选择终端ID", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        try
-        {
-            var body = TxtMessageBody.Text.Trim();
-            Newtonsoft.Json.Linq.JObject.Parse(body);
-        }
-        catch
-        {
-            MessageBox.Show("消息内容必须是有效的JSON格式", "格式错误", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        _currentMessage.TerminalId = terminalId;
-        _currentMessage.Body = TxtMessageBody.Text.Trim();
-        _currentMessage.Method = terminalId.Contains("image") ? "image" : "text";
-
-        _databaseService.UpdateMessage(_currentMessage);
-        LoadMessages();
-
-        AddLog("INFO", $"消息 #{_currentMessage.Id} 已修改保存");
-        MessageBox.Show("消息已保存", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
-    }
-
-    private void BtnCancelEdit_Click(object sender, RoutedEventArgs e)
-    {
-        _isEditMode = false;
-        TxtMessageBody.IsEnabled = false;
-
-        if (_currentMessage != null)
-        {
-            TxtMessageBody.Text = _currentMessage.Body;
-            CmbTerminalId.SelectedItem = _currentMessage.TerminalId;
-        }
-
-        EditButtonGroup.Visibility = Visibility.Visible;
-        SaveButtonGroup.Visibility = Visibility.Collapsed;
-    }
-
-    private void CmbTerminalId_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-    }
-
-    private void BtnDeleteMessage_Click(object sender, RoutedEventArgs e)
-    {
-        if (_currentMessage == null)
-        {
-            MessageBox.Show("请先选择一条消息", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        var result = MessageBox.Show(
-            $"确定要删除消息 #{_currentMessage.Id} 吗?",
-            "确认删除",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning);
-
-        if (result == MessageBoxResult.Yes)
-        {
-            _databaseService.DeleteMessage(_currentMessage.Id);
-            LoadMessages();
-            AddLog("INFO", $"消息 #{_currentMessage.Id} 已删除");
-            MessageBox.Show("消息已删除", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
     }
 
     protected override void OnClosed(EventArgs e)
