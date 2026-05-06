@@ -239,12 +239,18 @@
                         <TextBlock Text="推送目标配置" FontSize="15" FontWeight="Bold" Foreground="#333" Margin="0,0,0,12"/>
 
                         <Grid Margin="0,0,0,12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
                             <TextBlock Text="推送终端:" Style="{StaticResource LabelStyle}"/>
-                            <ComboBox x:Name="CmbTerminal" Grid.Column="1" Padding="8,6" FontSize="13"/>
+                            <ItemsControl x:Name="TerminalCheckBoxes" Grid.Row="1" Margin="0,4,0,0">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
                         </Grid>
 
                         <Grid Margin="0,0,0,12">
@@ -300,6 +306,7 @@
                 <StackPanel Orientation="Horizontal">
                     <Button x:Name="BtnSaveConfig" Content="保存配置" Style="{StaticResource PrimaryButton}" Click="BtnSaveConfig_Click" Margin="0,0,12,0"/>
                     <Button x:Name="BtnTestApi" Content="测试API连接" Style="{StaticResource SecondaryButton}" Background="#722ED1" Click="BtnTestApi_Click" Margin="0,0,12,0"/>
+                    <Button x:Name="BtnRealtimePush" Content="实时推送" Style="{StaticResource SecondaryButton}" Background="#FA8C16" Click="BtnRealtimePush_Click" Margin="0,0,12,0"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="BtnStartMonitor" Content="启动监控" Style="{StaticResource SecondaryButton}" Click="BtnStartMonitor_Click" Margin="0,0,12,0"/>

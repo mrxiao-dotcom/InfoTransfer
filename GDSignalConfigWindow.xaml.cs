@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -29,6 +30,9 @@ public partial class GDSignalConfigWindow : Window
     private readonly string _logFilePath;
     private readonly object _logFileLock = new();
     private Action<string, string> _safeLogCallback = null!;
+    private System.Threading.Timer? _autoSaveTimer;
+    private readonly object _autoSaveLock = new();
+    private List<CheckBox> _terminalCheckBoxes = new();
 
     public GDSignalConfigWindow(DatabaseService databaseService, ConfigService configService, Action<string, string> logCallback)
     {
@@ -61,21 +65,120 @@ public partial class GDSignalConfigWindow : Window
 
     private void GDSignalConfigWindow_Loaded(object sender, RoutedEventArgs e)
     {
-        LoadTerminals();
         LoadOrCreateConfig();
+        LoadTerminals(); // LoadTerminals 需要在 LoadOrCreateConfig 之后，因为依赖 _currentConfig
         UpdateUIState();
+        BindAutoSaveEvents();
+    }
+
+    /// <summary>
+    /// 绑定所有控件的自动保存事件
+    /// </summary>
+    private void BindAutoSaveEvents()
+    {
+        // TextBox 失去焦点时自动保存
+        TxtApiBaseUrl.LostFocus += (s, e) => ScheduleAutoSave();
+        TxtApiToken.LostFocus += (s, e) => ScheduleAutoSave();
+        TxtDayStartTime.LostFocus += (s, e) => ScheduleAutoSave();
+        TxtDayEndTime.LostFocus += (s, e) => ScheduleAutoSave();
+        TxtNightStartTime.LostFocus += (s, e) => ScheduleAutoSave();
+        TxtNightEndTime.LostFocus += (s, e) => ScheduleAutoSave();
+        TxtFixedTimeMinutes.LostFocus += (s, e) => ScheduleAutoSave();
+        TxtIntervalMinutes.LostFocus += (s, e) => ScheduleAutoSave();
+        TxtRealTimeStopValue.LostFocus += (s, e) => ScheduleAutoSave();
+        TxtRemainingRiskValue.LostFocus += (s, e) => ScheduleAutoSave();
+
+        // CheckBox 变化时自动保存
+        ChkGD15.Checked += (s, e) => ScheduleAutoSave();
+        ChkGD15.Unchecked += (s, e) => ScheduleAutoSave();
+        ChkGD20.Checked += (s, e) => ScheduleAutoSave();
+        ChkGD20.Unchecked += (s, e) => ScheduleAutoSave();
+        ChkGD25.Checked += (s, e) => ScheduleAutoSave();
+        ChkGD25.Unchecked += (s, e) => ScheduleAutoSave();
+        ChkGD30.Checked += (s, e) => ScheduleAutoSave();
+        ChkGD30.Unchecked += (s, e) => ScheduleAutoSave();
+        ChkGD35.Checked += (s, e) => ScheduleAutoSave();
+        ChkGD35.Unchecked += (s, e) => ScheduleAutoSave();
+        ChkGD40.Checked += (s, e) => ScheduleAutoSave();
+        ChkGD40.Unchecked += (s, e) => ScheduleAutoSave();
+        ChkNightSession.Checked += (s, e) => ScheduleAutoSave();
+        ChkNightSession.Unchecked += (s, e) => ScheduleAutoSave();
+        ChkEnableText.Checked += (s, e) => ScheduleAutoSave();
+        ChkEnableText.Unchecked += (s, e) => ScheduleAutoSave();
+        ChkEnableImage.Checked += (s, e) => ScheduleAutoSave();
+        ChkEnableImage.Unchecked += (s, e) => ScheduleAutoSave();
+        ChkRealTimeStopPriceDiffRate.Checked += (s, e) => ScheduleAutoSave();
+        ChkRealTimeStopPriceDiffRate.Unchecked += (s, e) => ScheduleAutoSave();
+        ChkRemainingRisk.Checked += (s, e) => ScheduleAutoSave();
+        ChkRemainingRisk.Unchecked += (s, e) => ScheduleAutoSave();
+
+        // RadioButton 变化时自动保存
+        RbFixedTime.Checked += (s, e) => ScheduleAutoSave();
+        RbInterval.Checked += (s, e) => ScheduleAutoSave();
+
+        // TerminalCheckBoxes will be bound in LoadTerminals after controls are initialized
+    }
+
+    /// <summary>
+    /// 延迟自动保存（500ms后执行）
+    /// </summary>
+    private void ScheduleAutoSave()
+    {
+        lock (_autoSaveLock)
+        {
+            _autoSaveTimer?.Dispose();
+            _autoSaveTimer = new System.Threading.Timer(_ =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    SaveConfigFromUI();
+                    SaveConfigToDatabase();
+                });
+            }, null, 500, Timeout.Infinite);
+        }
+    }
+
+    /// <summary>
+    /// 立即保存配置到数据库
+    /// </summary>
+    private void SaveConfigToDatabase()
+    {
+        if (_currentConfig == null) return;
+
+        try
+        {
+            _databaseService.SaveGDSignalConfig(_currentConfig);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"自动保存配置失败: {ex.Message}");
+        }
     }
 
     private void LoadTerminals()
     {
-        CmbTerminal.Items.Clear();
+        TerminalCheckBoxes.Items.Clear();
+        _terminalCheckBoxes.Clear();
+
+        var savedTerminals = new List<string>();
+        if (_currentConfig != null && !string.IsNullOrEmpty(_currentConfig.TerminalId))
+        {
+            savedTerminals = _currentConfig.TerminalId.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+        }
+
         foreach (var config in _configService.Config.FeishuPushConfig.Configs)
         {
-            CmbTerminal.Items.Add(new ComboBoxItem { Content = config.TerminalId, Tag = config });
-        }
-        if (CmbTerminal.Items.Count > 0)
-        {
-            CmbTerminal.SelectedIndex = 0;
+            var checkBox = new CheckBox
+            {
+                Content = config.TerminalId,
+                Tag = config.TerminalId,
+                Margin = new Thickness(0, 0, 15, 5),
+                IsChecked = savedTerminals.Contains(config.TerminalId)
+            };
+            checkBox.Checked += (s, e) => ScheduleAutoSave();
+            checkBox.Unchecked += (s, e) => ScheduleAutoSave();
+            TerminalCheckBoxes.Items.Add(checkBox);
+            _terminalCheckBoxes.Add(checkBox);
         }
     }
 
@@ -116,16 +219,6 @@ public partial class GDSignalConfigWindow : Window
         TxtFixedTimeMinutes.IsEnabled = _currentConfig.UseFixedTimePoints;
         TxtFixedTimeMinutes.Text = string.IsNullOrEmpty(_currentConfig.FixedTimeMinutes) ? "0,15,30,45" : _currentConfig.FixedTimeMinutes;
 
-        // 加载推送终端
-        foreach (ComboBoxItem item in CmbTerminal.Items)
-        {
-            if (item.Content.ToString() == _currentConfig.TerminalId)
-            {
-                CmbTerminal.SelectedItem = item;
-                break;
-            }
-        }
-
         ChkEnableText.IsChecked = _currentConfig.EnableText;
         ChkEnableImage.IsChecked = _currentConfig.EnableImage;
 
@@ -165,10 +258,13 @@ public partial class GDSignalConfigWindow : Window
         _currentConfig.UseFixedTimePoints = RbFixedTime.IsChecked == true;
         _currentConfig.FixedTimeMinutes = TxtFixedTimeMinutes.Text.Trim();
 
-        if (CmbTerminal.SelectedItem is ComboBoxItem item)
-        {
-            _currentConfig.TerminalId = item.Content.ToString() ?? "";
-        }
+        // 保存选中的终端ID列表（逗号分隔）
+        var selectedTerminals = _terminalCheckBoxes
+            .Where(cb => cb.IsChecked == true)
+            .Select(cb => cb.Tag?.ToString())
+            .Where(t => !string.IsNullOrEmpty(t))
+            .ToList();
+        _currentConfig.TerminalId = string.Join(",", selectedTerminals);
 
         _currentConfig.EnableText = ChkEnableText.IsChecked == true;
         _currentConfig.EnableImage = ChkEnableImage.IsChecked == true;
@@ -379,6 +475,133 @@ public partial class GDSignalConfigWindow : Window
     private void BtnStopMonitor_Click(object sender, RoutedEventArgs e)
     {
         StopMonitoring();
+    }
+
+    private async void BtnRealtimePush_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            BtnRealtimePush.IsEnabled = false;
+            _safeLogCallback("INFO", "========== 开始实时推送 ==========");
+
+            // 获取所有GD监控配置
+            var configs = _databaseService.GetAllGDSignalConfigs();
+            if (configs.Count == 0)
+            {
+                _safeLogCallback("WARN", "未找到GD监控配置");
+                return;
+            }
+
+            // 只调用一次 API 获取所有数据
+            var data = await FetchSignalDataAsync();
+            if (data == null)
+            {
+                _safeLogCallback("ERROR", "API调用失败");
+                return;
+            }
+
+            var dataArray = data["data"] as JArray;
+            if (dataArray == null)
+            {
+                _safeLogCallback("ERROR", "数据格式错误");
+                return;
+            }
+
+            foreach (var config in configs)
+            {
+                // 显示配置及其启用的策略
+                var enabledStrategies = new List<string>();
+                if (config.EnableGD15) enabledStrategies.Add("GD15");
+                if (config.EnableGD20) enabledStrategies.Add("GD20");
+                if (config.EnableGD25) enabledStrategies.Add("GD25");
+                if (config.EnableGD30) enabledStrategies.Add("GD30");
+                if (config.EnableGD35) enabledStrategies.Add("GD35");
+                if (config.EnableGD40) enabledStrategies.Add("GD40");
+
+                _safeLogCallback("INFO", $"处理配置: {config.Name} (ID={config.Id}), 启用策略: {(enabledStrategies.Count > 0 ? string.Join(",", enabledStrategies) : "无")}");
+
+                if (enabledStrategies.Count == 0)
+                {
+                    _safeLogCallback("INFO", $"  -> 该配置没有启用任何策略，跳过");
+                    continue;
+                }
+
+                // 收集每个策略下 realTimeStopPriceDiffRate > 0 的品种
+                var strategyProducts = new Dictionary<string, List<string>>();
+                foreach (var strategy in enabledStrategies)
+                {
+                    strategyProducts[strategy] = new List<string>();
+                }
+
+                foreach (var productData in dataArray)
+                {
+                    var productId = productData["productId"]?.ToString() ?? "";
+                    var items = productData["items"] as JObject;
+                    if (items == null) continue;
+
+                    foreach (var strategyName in enabledStrategies)
+                    {
+                        var strategyData = items[strategyName] as JObject;
+                        if (strategyData == null) continue;
+
+                        var realTimeStopPriceDiffRate = strategyData["realTimeStopPriceDiffRate"]?.Value<double>() ?? 0;
+                        if (realTimeStopPriceDiffRate > 0)
+                        {
+                            strategyProducts[strategyName].Add(productId);
+                        }
+                    }
+                }
+
+                // 输出表格：行为品种，列为策略
+                var allProducts = strategyProducts.Values.SelectMany(x => x).Distinct().OrderBy(x => x).ToList();
+
+                if (allProducts.Count == 0)
+                {
+                    _safeLogCallback("INFO", $"【{config.Name}】没有找到 realTimeStopPriceDiffRate > 0 的品种");
+                    continue;
+                }
+
+                // 构建表头
+                var header = string.Join(" | ", enabledStrategies.Select(s => s.PadRight(6)));
+                _safeLogCallback("INFO", $"【{config.Name}】realTimeStopPriceDiffRate > 0 的品种 (策略列为策略)");
+                _safeLogCallback("INFO", new string('-', header.Length));
+                _safeLogCallback("INFO", header);
+                _safeLogCallback("INFO", new string('-', header.Length));
+
+                // 构建数据行
+                foreach (var productId in allProducts)
+                {
+                    var cells = new List<string>();
+                    foreach (var strategy in enabledStrategies)
+                    {
+                        var hasProduct = strategyProducts[strategy].Contains(productId);
+                        cells.Add(hasProduct ? productId : "");
+                    }
+                    _safeLogCallback("INFO", string.Join(" | ", cells.Select(c => c.PadRight(6))));
+                }
+                _safeLogCallback("INFO", new string('-', header.Length));
+
+                // 输出统计
+                foreach (var strategy in enabledStrategies)
+                {
+                    var count = strategyProducts[strategy].Count;
+                    if (count > 0)
+                    {
+                        _safeLogCallback("INFO", $"  {strategy}: {string.Join(", ", strategyProducts[strategy])}");
+                    }
+                }
+            }
+
+            _safeLogCallback("INFO", "========== 实时推送完成 ==========");
+        }
+        catch (Exception ex)
+        {
+            _safeLogCallback("ERROR", $"实时推送异常: {ex.Message}");
+        }
+        finally
+        {
+            BtnRealtimePush.IsEnabled = true;
+        }
     }
 
     private void StartMonitorTimer()

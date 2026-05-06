@@ -205,7 +205,6 @@ public class ImageGeneratorService
     {
         const int colRankWidth = 50;
         const int colSymbolWidth = 100;
-        const int colSmoothnessWidth = 100;
 
         // 标题
         using var titleFont = new Font("Microsoft YaHei UI", 13, FontStyle.Bold);
@@ -271,7 +270,6 @@ public class ImageGeneratorService
     {
         const int colRankWidth = 50;
         const int colSymbolWidth = 100;
-        const int colSmoothnessWidth = 100;
 
         // 标题
         using var titleFont = new Font("Microsoft YaHei UI", 13, FontStyle.Bold);

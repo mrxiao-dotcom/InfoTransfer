@@ -1,0 +1,211 @@
+<Window x:Class="InfoTransfer.GDStopLossMonitorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="盘中止损监测"
+        Height="600" Width="900"
+        WindowStartupLocation="CenterScreen"
+        Background="#F5F5F5"
+        Closing="Window_Closing"
+        Loaded="Window_Loaded">
+    <Window.Resources>
+        <Style x:Key="CardStyle" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Margin" Value="8"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.1"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#1890FF"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="20,10"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#40A9FF"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#D9D9D9"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DangerButton" TargetType="Button">
+            <Setter Property="Background" Value="#F5222D"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="20,10"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#FF4D4F"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#D9D9D9"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#52C41A"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="20,10"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#73D13D"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#D9D9D9"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 标题和状态 -->
+        <Border Grid.Row="0" Style="{StaticResource CardStyle}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel>
+                    <TextBlock Text="盘中止损监测" FontSize="20" FontWeight="Bold" Foreground="#333"/>
+                    <TextBlock x:Name="TxtStatus" Text="状态: 未启动" FontSize="14" Foreground="#666" Margin="0,8,0,0"/>
+                    <TextBlock x:Name="TxtNextRun" Text="下次执行: --" FontSize="12" Foreground="#999" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="TxtLastResult" Text="上次结果: --" FontSize="12" Foreground="#999" Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="BtnStart" Content="启动监测"
+                            Style="{StaticResource DangerButton}"
+                            Click="BtnStart_Click" Margin="0,0,8,0"/>
+                    <Button x:Name="BtnStop" Content="停止监测"
+                            Style="{StaticResource SecondaryButton}"
+                            IsEnabled="False"
+                            Click="BtnStop_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 监控配置 -->
+        <Border Grid.Row="1" Style="{StaticResource CardStyle}">
+            <StackPanel>
+                <TextBlock Text="监控配置" FontSize="16" FontWeight="Bold" Foreground="#333" Margin="0,0,0,12"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,0,20,0">
+                        <TextBlock Text="推送终端:" VerticalAlignment="Center" Margin="0,0,0,4"/>
+                        <ItemsControl x:Name="TerminalCheckBoxes">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,20,0">
+                        <TextBlock Text="扫描间隔:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBox x:Name="TxtScanInterval" Width="50" Text="1" TextAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Text="分钟(1-60)" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="发送形式:" Margin="0,0,8,0"/>
+                        <CheckBox x:Name="ChkSendText" Content="文字" IsChecked="True" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                        <CheckBox x:Name="ChkSendImage" Content="图片" IsChecked="False" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="3" Text="仅在配置的监控时间段内执行" 
+                               VerticalAlignment="Center" Foreground="#999" FontSize="12"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- 日志输出 -->
+        <Border Grid.Row="2" Style="{StaticResource CardStyle}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="执行日志" FontSize="16" FontWeight="Bold" Foreground="#333" Margin="0,0,0,8"/>
+
+                <TextBox x:Name="LogTextBox" Grid.Row="1"
+                         BorderBrush="#E8E8E8" BorderThickness="1"
+                         Background="#1E1E1E" Foreground="#00FF00"
+                         FontFamily="Consolas" FontSize="11"
+                         IsReadOnly="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         AcceptsReturn="True"/>
+            </Grid>
+        </Border>
+
+        <!-- 底部按钮 -->
+        <Border Grid.Row="3" Style="{StaticResource CardStyle}">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="清空日志" Style="{StaticResource SecondaryButton}" 
+                        Background="#666" Click="BtnClearLog_Click" Margin="0,0,8,0"/>
+                <Button Content="关闭" Style="{StaticResource SecondaryButton}" 
+                        Click="BtnClose_Click"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

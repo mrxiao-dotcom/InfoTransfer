@@ -74,6 +74,7 @@ public class TerminalConfig
     public int Id { get; set; }
     public string TerminalId { get; set; } = "";
     public string TextWebhook { get; set; } = "";
+    public string ImageWebhook { get; set; } = "";
     public string ImageApiKey { get; set; } = "";
     public string ImageSecretKey { get; set; } = "";
     public string ImageReceiverId { get; set; } = "";

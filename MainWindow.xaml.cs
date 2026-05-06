@@ -284,6 +284,13 @@ public partial class MainWindow : Window
         gdWindow.ShowDialog();
     }
 
+    private void BtnGDStopLossMonitor_Click(object sender, RoutedEventArgs e)
+    {
+        var stopLossWindow = new GDStopLossMonitorWindow(_databaseService, _configService, AddLog);
+        stopLossWindow.Owner = this;
+        stopLossWindow.Show();
+    }
+
     private void BtnClearLog_Click(object sender, RoutedEventArgs e)
     {
         LogTextBox.Text = "";

@@ -209,7 +209,11 @@
                     <Button x:Name="BtnGDSignalMonitor" Content="启动GD监控"
                             Style="{StaticResource SecondaryButton}"
                             Background="#FA8C16"
-                            Click="BtnGDSignalMonitor_Click"/>
+                            Click="BtnGDSignalMonitor_Click" Margin="0,0,8,0"/>
+                    <Button x:Name="BtnGDStopLossMonitor" Content="盘中止损监测"
+                            Style="{StaticResource SecondaryButton}"
+                            Background="#F5222D"
+                            Click="BtnGDStopLossMonitor_Click"/>
                 </StackPanel>
             </Grid>
         </Border>
