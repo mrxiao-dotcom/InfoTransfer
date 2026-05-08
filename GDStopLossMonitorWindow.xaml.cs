@@ -43,6 +43,7 @@ public partial class GDStopLossMonitorWindow : Window
     private System.Windows.Threading.DispatcherTimer? _heartbeatTimer;
     private DateTime? _lastHeartbeatSent;
     private readonly string _historyFilePath;
+    private readonly string _debugFilePath;
 
     public GDStopLossMonitorWindow(DatabaseService databaseService, ConfigService configService, Action<string, string> logCallback)
     {
@@ -62,6 +63,7 @@ public partial class GDStopLossMonitorWindow : Window
         Directory.CreateDirectory(dataDir);
         _historyFilePath = Path.Combine(dataDir, "stop_loss_history.json");
         _columnsFilePath = Path.Combine(dataDir, "stop_loss_columns.json");
+        _debugFilePath = Path.Combine(dataDir, $"stop_loss_debug_{DateTime.Now:yyyyMMdd_HHmmss}.log");
 
         // 绑定事件
         ChkSendText.Checked += ChkSendOption_Changed;
@@ -95,24 +97,8 @@ public partial class GDStopLossMonitorWindow : Window
             if (File.Exists(_historyFilePath))
             {
                 var json = File.ReadAllText(_historyFilePath);
-                var doc = System.Text.Json.JsonDocument.Parse(json);
-
-                // 加载过滤后的数据（策略 -> 品种列表）
-                if (doc.RootElement.TryGetProperty("Data", out var dataElement))
-                {
-                    _lastPushData = JToken.Parse(dataElement.GetRawText());
-                    Log("INFO", $"已加载历史数据 (保存时间: {doc.RootElement.GetProperty("SavedAt").GetString()})");
-                }
-
-                // 同时加载 columns
-                if (doc.RootElement.TryGetProperty("Columns", out var colsElement))
-                {
-                    try
-                    {
-                        _tableColumns = System.Text.Json.JsonSerializer.Deserialize<List<string>>(colsElement.GetRawText()) ?? new List<string>();
-                    }
-                    catch { }
-                }
+                _lastPushData = JToken.Parse(json);
+                Log("INFO", "已加载历史数据用于比对");
             }
         }
         catch (Exception ex)
@@ -121,19 +107,50 @@ public partial class GDStopLossMonitorWindow : Window
         }
     }
 
-    // 保存历史数据：保存过滤后的策略品种数据
+    // 加载历史数据用于比对
+    private Dictionary<string, List<(string productId, string direction)>>? LoadHistoryDataForCompare()
+    {
+        try
+        {
+            if (!File.Exists(_historyFilePath))
+                return null;
+
+            var json = File.ReadAllText(_historyFilePath);
+            var result = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, List<Dictionary<string, string>>>>(json);
+
+            if (result == null) return null;
+
+            var dict = new Dictionary<string, List<(string productId, string direction)>>();
+            foreach (var kvp in result)
+            {
+                var products = kvp.Value
+                    .Where(d => d.ContainsKey("productId") && !string.IsNullOrEmpty(d["productId"]))
+                    .Select(d => (d["productId"], d.GetValueOrDefault("direction") ?? ""))
+                    .ToList();
+                dict[kvp.Key] = products;
+            }
+
+            Log("DEBUG", $"[历史数据] 已加载历史比对数据，共{dict.Sum(kv => kv.Value.Count)}条记录");
+            return dict;
+        }
+        catch (Exception ex)
+        {
+            Log("WARN", $"加载历史数据用于比对失败: {ex.Message}");
+            return null;
+        }
+    }
+
+    // 保存历史数据 - 使用 Dictionary<string, List<Dictionary<string, string>>> 格式便于读取
     private void SaveHistoryData(Dictionary<string, List<(string productId, string direction)>> filteredData)
     {
         try
         {
-            var history = new
-            {
-                Data = filteredData,
-                Columns = _tableColumns,
-                SavedAt = DateTime.Now
-            };
-            var json = Newtonsoft.Json.JsonConvert.SerializeObject(history, Newtonsoft.Json.Formatting.Indented);
-
+            // 转换为便于 JSON 序列化/反序列化的格式
+            var saveData = filteredData.ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value.Select(p => new Dictionary<string, string> { ["productId"] = p.productId, ["direction"] = p.direction }).ToList()
+            );
+            var json = Newtonsoft.Json.JsonConvert.SerializeObject(saveData, Newtonsoft.Json.Formatting.Indented);
             File.WriteAllText(_historyFilePath, json);
         }
         catch (Exception ex)
@@ -473,13 +490,16 @@ public partial class GDStopLossMonitorWindow : Window
             var changeDescription = "";
             var changedProducts = new List<(string strategy, string productId, bool isAdded)>();
 
+            // 尝试加载历史数据进行比对
+            var historyFiltered = LoadHistoryDataForCompare();
+            var previousFiltered = historyFiltered ?? (_lastPushData != null ? GetFilteredStrategyProducts(_lastPushData, enabledStrategies) : null);
+
             if (isFirstPush)
             {
-                // 检查当前数据与历史数据是否完全相同
-                if (File.Exists(_historyFilePath) && _lastPushData != null)
+                if (previousFiltered != null)
                 {
-                    var historyFiltered = GetFilteredStrategyProducts(_lastPushData, enabledStrategies);
-                    changeDescription = BuildChangeDescriptionFromFiltered(currentFiltered, historyFiltered, out changedProducts);
+                    // 与历史数据比对
+                    changeDescription = BuildChangeDescriptionFromFiltered(currentFiltered, previousFiltered, out changedProducts);
                     hasChanged = !string.IsNullOrEmpty(changeDescription) && changeDescription != "无变化";
                 }
 
@@ -498,7 +518,6 @@ public partial class GDStopLossMonitorWindow : Window
             }
             else
             {
-                var previousFiltered = GetFilteredStrategyProducts(_lastPushData, enabledStrategies);
                 changeDescription = BuildChangeDescriptionFromFiltered(currentFiltered, previousFiltered, out changedProducts);
                 hasChanged = !string.IsNullOrEmpty(changeDescription) && changeDescription != "无变化";
 
@@ -946,6 +965,15 @@ public partial class GDStopLossMonitorWindow : Window
         }
     }
 
+    private void LogToDebugFile(string content)
+    {
+        try
+        {
+            File.AppendAllText(_debugFilePath, $"[{DateTime.Now:HH:mm:ss.fff}]{Environment.NewLine}{content}{Environment.NewLine}{new string('=', 80)}{Environment.NewLine}");
+        }
+        catch { }
+    }
+
     private void BtnClearLog_Click(object sender, RoutedEventArgs e)
     {
         LogTextBox.Text = "";
@@ -1094,16 +1122,24 @@ public partial class GDStopLossMonitorWindow : Window
     // 处理表格格式数据：{columns: [...], data: [[...], [...], ...]}
     private Dictionary<string, List<(string productId, string direction)>> GetFilteredStrategyProductsFromTableFormat(JArray dataArray, List<string>? enabledStrategies = null)
     {
+        var debugLog = new StringBuilder();
+        debugLog.AppendLine($"[DEBUG] GetFilteredStrategyProductsFromTableFormat 开始执行");
+        debugLog.AppendLine($"[DEBUG] dataArray.Count = {dataArray.Count}");
+
         // 获取 columns（列名）
         var columns = _tableColumns ?? new List<string>();
+        debugLog.AppendLine($"[DEBUG] columns.Count = {columns.Count}");
         if (columns.Count == 0)
         {
+            debugLog.AppendLine("[DEBUG] columns为空，返回空结果");
+            LogToDebugFile(debugLog.ToString());
             return new Dictionary<string, List<(string productId, string direction)>>();
         }
 
         var allStrategies = new[] { "GD15", "GD20", "GD25", "GD30", "GD35", "GD40" };
         var strategiesToUse = enabledStrategies?.Count > 0 ? enabledStrategies : allStrategies.ToList();
         var enabledSet = new HashSet<string>(strategiesToUse);
+        debugLog.AppendLine($"[DEBUG] strategiesToUse = {string.Join(", ", strategiesToUse)}");
 
         var result = new Dictionary<string, List<(string productId, string direction)>>();
         foreach (var strategy in strategiesToUse)
@@ -1144,6 +1180,7 @@ public partial class GDStopLossMonitorWindow : Window
             if (string.IsNullOrEmpty(productId)) continue;
 
             var strategyName = columns.Contains("strategyName") ? row[columns.IndexOf("strategyName")]?.ToString() ?? "" : "";
+            debugLog.AppendLine($"[DEBUG] 读取行: productId={productId}, strategyName={strategyName}");
             if (!strategiesToUse.Contains(strategyName)) continue;
 
             var rate = rateIdx >= 0 ? (row[rateIdx]?.Value<double>() ?? 0) : 0;
@@ -1156,6 +1193,12 @@ public partial class GDStopLossMonitorWindow : Window
             }
 
             productGroups[productId][strategyName] = (direction, rate, remainingRisk);
+        }
+
+        debugLog.AppendLine($"[DEBUG] productGroups 统计: 共 {productGroups.Count} 个品种");
+        foreach (var pg in productGroups)
+        {
+            debugLog.AppendLine($"[DEBUG]   {pg.Key}: {string.Join(", ", pg.Value.Select(v => v.Key))}");
         }
 
         // 收集已勾选策略的持仓方向（不限条件）
@@ -1173,6 +1216,8 @@ public partial class GDStopLossMonitorWindow : Window
         }
 
         // 应用筛选逻辑
+        // 第一步：收集每个品种在各策略中的有效数据（用于后续排序）
+        var productStrategyData = new Dictionary<string, Dictionary<string, (string direction, double rate, double remainingRisk)>>();
         foreach (var productKvp in productGroups)
         {
             var productId = productKvp.Key;
@@ -1207,10 +1252,68 @@ public partial class GDStopLossMonitorWindow : Window
                     if (!allHigherMatch) continue;
                 }
 
-                result[strategy].Add((productId, direction));
+                // 记录有效数据
+                if (!productStrategyData.ContainsKey(productId))
+                    productStrategyData[productId] = new Dictionary<string, (string, double, double)>();
+                productStrategyData[productId][strategy] = (direction, rate, remainingRisk);
             }
         }
 
+        // 第二步：统计每个品种被多少个策略选中（用于共振排序）
+        var productStrategyCount = productStrategyData
+            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Count);
+
+        // 第三步：分离共振品种和单策略品种
+        // 共振品种：按共振数量降序排序，相同时按字母排序
+        var resonanceProducts = productStrategyCount
+            .Where(kv => kv.Value >= 2)
+            .OrderByDescending(kv => kv.Value)
+            .ThenBy(kv => kv.Key)
+            .Select(kv => kv.Key)
+            .ToList();
+
+        // 单策略品种：按字母排序
+        var singleProducts = productStrategyCount
+            .Where(kv => kv.Value == 1)
+            .OrderBy(kv => kv.Key)
+            .ToList();
+
+        // 第四步：构建品种列表
+        // 共振品种：按统一顺序排列，占据前面行（如果某策略没有该品种，该行留空）
+        // 单策略品种：追加到各自策略的共振品种之后
+        debugLog.AppendLine($"[DEBUG] 共振品种: {string.Join(", ", resonanceProducts)}");
+        debugLog.AppendLine($"[DEBUG] 单策略品种: {string.Join(", ", singleProducts.Select(kv => $"{kv.Key}({kv.Value})"))}");
+
+        foreach (var strategy in strategiesToUse)
+        {
+            result[strategy] = new List<(string, string)>();
+
+            // 4.1 添加共振品种（按统一顺序）
+            foreach (var productId in resonanceProducts)
+            {
+                if (productStrategyData.TryGetValue(productId, out var stratData) &&
+                    stratData.TryGetValue(strategy, out var data))
+                {
+                    result[strategy].Add((productId, data.direction));
+                }
+                // 如果该策略没有这个品种，该行留空（不添加）
+            }
+
+            // 4.2 添加单策略品种（追加到共振品种之后）
+            foreach (var (productId, _) in singleProducts)
+            {
+                if (productStrategyData.TryGetValue(productId, out var stratData) &&
+                    stratData.TryGetValue(strategy, out var data))
+                {
+                    result[strategy].Add((productId, data.direction));
+                }
+            }
+
+            debugLog.AppendLine($"[DEBUG] {strategy}: 共振{resonanceProducts.Count}个 + 单策略{result[strategy].Count - resonanceProducts.Count}个");
+            debugLog.AppendLine($"[DEBUG]   品种列表: {string.Join(", ", result[strategy].Select(p => p.productId))}");
+        }
+
+        LogToDebugFile(debugLog.ToString());
         return result;
     }
 
@@ -1414,34 +1517,58 @@ public partial class GDStopLossMonitorWindow : Window
             // 使用共享方法获取过滤后的品种数据
             var strategyProducts = GetFilteredStrategyProducts(data, enabledStrategies);
 
-            // 计算品种出现频率并排序
-            var productFrequency = new Dictionary<string, int>();
-            foreach (var kvp in strategyProducts)
+            // 分离共振品种（2个及以上策略同时有的）和非共振品种
+            var strategies = enabledStrategies.ToArray();
+
+            // 统计每个品种被哪些策略包含
+            var productStrategies = new Dictionary<string, List<string>>();
+            foreach (var strategy in strategies)
             {
-                foreach (var (productId, _) in kvp.Value)
+                foreach (var (productId, _) in strategyProducts[strategy])
                 {
-                    if (productFrequency.ContainsKey(productId))
-                        productFrequency[productId]++;
-                    else
-                        productFrequency[productId] = 1;
+                    if (!productStrategies.ContainsKey(productId))
+                        productStrategies[productId] = new List<string>();
+                    if (!productStrategies[productId].Contains(strategy))
+                        productStrategies[productId].Add(strategy);
                 }
             }
-            var sortedProducts = productFrequency.OrderByDescending(x => x.Value).ToList();
 
-            // 检查是否有数据
-            if (sortedProducts.Count == 0) return null;
+            // 按共振数量降序排序
+            var resonanceProducts = productStrategies
+                .Where(kv => kv.Value.Count >= 2)
+                .OrderByDescending(kv => kv.Value.Count)
+                .ThenBy(kv => kv.Key) // 共振数量相同时按字母排序
+                .Select(kv => kv.Key)
+                .ToList();
 
-            // 构建排序后的品种数据：按品种频率重新组织每列
-            var strategies = enabledStrategies.ToArray();
+            // 单策略品种（只在一个策略中出现的）
+            var singleProducts = productStrategies
+                .Where(kv => kv.Value.Count == 1)
+                .OrderBy(kv => kv.Key) // 按字母排序
+                .ToDictionary(kv => kv.Key, kv => kv.Value[0]); // productId -> onlyStrategy
+
+            // ========== 排版监测日志 ==========
+            Log("DEBUG", $"[表格排版监测] 开始分析");
+            Log("DEBUG", $"[表格排版监测] 共振品种({resonanceProducts.Count}个): {string.Join(", ", resonanceProducts)}");
+            Log("DEBUG", $"[表格排版监测] 单策略品种({singleProducts.Count}个): {string.Join(", ", singleProducts.Select(kv => $"{kv.Key}({kv.Value})"))}");
+
+            // ========== 新的排序逻辑 ==========
+            // 1. 共振品种：按统一顺序排列，占据前面行
+            // 2. 单策略品种：在共振品种之后，按各自策略的顺序排列（不占用共振行）
+            var finalProductOrder = new List<string>(resonanceProducts);
+
+            // 构建排序后的品种数据
             var sortedStrategyProducts = new Dictionary<string, List<(string productId, string direction)>>();
             foreach (var strategy in strategies)
             {
                 sortedStrategyProducts[strategy] = new List<(string, string)>();
             }
 
-            // 按频率排序遍历品种
-            foreach (var (productId, _) in sortedProducts)
+            // 第一步：添加共振品种（按统一顺序）
+            var resonanceRowCount = resonanceProducts.Count;
+            for (int i = 0; i < resonanceProducts.Count; i++)
             {
+                var productId = resonanceProducts[i];
                 foreach (var strategy in strategies)
                 {
                     var originalList = strategyProducts[strategy];
@@ -1450,13 +1577,151 @@ public partial class GDStopLossMonitorWindow : Window
                     {
                         sortedStrategyProducts[strategy].Add(product);
                     }
+                    // 共振品种：如果该策略没有这个品种，该行留空（不添加）
                 }
             }
+
+            // 第二步：添加单策略品种（按各自策略的顺序，追加到共振品种之后）
+            foreach (var strategy in strategies)
+            {
+                var originalList = strategyProducts[strategy];
+                foreach (var (productId, direction) in originalList)
+                {
+                    // 只添加单策略品种（不在共振品种列表中）
+                    if (!resonanceProducts.Contains(productId))
+                    {
+                        sortedStrategyProducts[strategy].Add((productId, direction));
+                    }
+                }
+            }
+
+            // ========== 排版监测日志 ==========
+            Log("DEBUG", $"[表格排版监测] 共振行数: {resonanceRowCount}");
+            Log("DEBUG", $"[表格排版监测] 统一品种顺序(共振部分): {string.Join(" -> ", resonanceProducts)}");
+
+            // 记录每个品种在各策略中的行号
+            var productRowMapping = new Dictionary<string, Dictionary<string, int>>();
+
+            foreach (var productId in finalProductOrder)
+            {
+                productRowMapping[productId] = new Dictionary<string, int>();
+            }
+
+            // 输出每个品种在各策略中的行号映射
+            Log("DEBUG", $"[表格排版监测] 各品种行号映射:");
+            foreach (var productId in resonanceProducts)
+            {
+                var stratMapping = new Dictionary<string, int>();
+                for (int col = 0; col < strategies.Length; col++)
+                {
+                    var strategy = strategies[col];
+                    var list = sortedStrategyProducts[strategy];
+                    var idx = list.FindIndex(p => p.productId == productId);
+                    if (idx >= 0)
+                    {
+                        stratMapping[strategy] = idx + 1; // 1-based
+                        if (!productRowMapping.ContainsKey(productId))
+                            productRowMapping[productId] = new Dictionary<string, int>();
+                        productRowMapping[productId][strategy] = idx;
+                    }
+                }
+                var mappingStr = string.Join(", ", strategies.Select(s =>
+                    stratMapping.TryGetValue(s, out var row) ? $"{s}@行{row}" : $"{s}@空"));
+                Log("DEBUG", $"[表格排版监测]   {productId}: {mappingStr}");
+            }
+
+            // 检查排版对齐
+            bool hasAlignmentIssue = false;
+            foreach (var productId in resonanceProducts)
+            {
+                if (productRowMapping.TryGetValue(productId, out var stratMapping))
+                {
+                    var filledRows = stratMapping.Values.ToList();
+                    if (filledRows.Count > 1)
+                    {
+                        var maxRow = filledRows.Max();
+                        var minRow = filledRows.Min();
+                        if (maxRow != minRow) // 共振品种必须同行
+                        {
+                            hasAlignmentIssue = true;
+                            var issueStr = string.Join(", ", strategies.Select(s =>
+                                stratMapping.TryGetValue(s, out var row) ? $"{s}@行{row + 1}" : $"{s}@空"));
+                            Log("WARN", $"[表格排版监测] ⚠️ 共振品种排版错位: {productId} - {issueStr}");
+                        }
+                    }
+                }
+            }
+
+            // 输出每个策略的最终品种列表
+            Log("DEBUG", $"[表格排版监测] 各策略品种列表及对应行号:");
+            foreach (var strategy in strategies)
+            {
+                var list = sortedStrategyProducts[strategy];
+                var displayList = list.Select((p, idx) => $"行{idx + 1}:{p.productId}").ToList();
+                Log("DEBUG", $"[表格排版监测]   {strategy}: {string.Join(", ", displayList)}");
+            }
+
+            if (!hasAlignmentIssue)
+            {
+                Log("DEBUG", $"[表格排版监测] ✓ 排版对齐正常");
+            }
+            // ========== 排版监测日志结束 ==========
 
             // 图片参数：策略名 + 品种列表 = 最多 8 列
             int colCount = 1 + strategies.Length; // 策略名 + 6个策略
             int maxRows = sortedStrategyProducts.Values.Max(list => list.Count);
             if (maxRows == 0) return null;
+
+            // ========== 计算每行应该显示什么品种 ==========
+            // row -> strategy -> (productId, direction) or null
+            var rowDisplayData = new List<Dictionary<string, (string productId, string direction)?>>();
+            var totalRows = resonanceRowCount + sortedStrategyProducts.Values.Max(list =>
+            {
+                // 单策略品种的最大数量
+                return list.Count - resonanceRowCount;
+            });
+
+            // 共振品种行：每个品种对应一行
+            for (int i = 0; i < resonanceProducts.Count; i++)
+            {
+                var productId = resonanceProducts[i];
+                var rowDict = new Dictionary<string, (string productId, string direction)?>();
+                foreach (var strategy in strategies)
+                {
+                    var list = sortedStrategyProducts[strategy];
+                    var item = list.FirstOrDefault(p => p.productId == productId);
+                    if (item.productId != null)
+                    {
+                        rowDict[strategy] = item;
+                    }
+                    else
+                    {
+                        rowDict[strategy] = null; // 该策略没有这个品种，留空
+                    }
+                }
+                rowDisplayData.Add(rowDict);
+            }
+
+            // 单策略品种行：按各自策略的顺序追加
+            foreach (var strategy in strategies)
+            {
+                var list = sortedStrategyProducts[strategy];
+                var singleProductsInStrategy = list.Skip(resonanceRowCount).ToList();
+                int offset = 0;
+                foreach (var product in singleProductsInStrategy)
+                {
+                    // 确保这一行存在
+                    while (rowDisplayData.Count <= resonanceRowCount + offset)
+                    {
+                        rowDisplayData.Add(new Dictionary<string, (string productId, string direction)?>());
+                    }
+                    rowDisplayData[resonanceRowCount + offset][strategy] = product;
+                    offset++;
+                }
+            }
+
+            // 计算实际的总行数
+            totalRows = rowDisplayData.Count;
 
             int cellHeight = 28;
             int titleHeight = 36;
@@ -1534,25 +1799,22 @@ public partial class GDStopLossMonitorWindow : Window
                 x += cw;
             }
 
-            // 绘制数据列
+            // 绘制数据列 - 按行绘制
             y += titleHeight;
-            for (int row = 0; row < maxRows; row++)
+
+            // 遍历每一行
+            for (int row = 0; row < totalRows; row++)
             {
                 x = padding;
 
-                // 收集当前行的所有品种（用于判断是否跨列重复）
-                var rowProducts = new Dictionary<int, string>(); // colIndex -> productId
-                for (int col = 0; col < strategies.Length; col++)
-                {
-                    var products = sortedStrategyProducts[strategies[col]];
-                    if (row < products.Count)
-                    {
-                        rowProducts[col] = products[row].productId;
-                    }
-                }
+                // 获取当前行的品种信息
+                var rowDict = rowDisplayData[row];
 
-                // 统计每个品种在当前行出现的次数
-                var productCounts = rowProducts.Values.GroupBy(p => p).ToDictionary(g => g.Key, g => g.Count());
+                // 统计每个品种在当前行出现的次数（用于高亮共振）
+                var productCounts = rowDict.Values
+                    .Where(v => v.HasValue)
+                    .GroupBy(v => v.Value.productId)
+                    .ToDictionary(g => g.Key, g => g.Count());
                 var repeatedProducts = productCounts.Where(kv => kv.Value > 1).Select(kv => kv.Key).ToHashSet();
 
                 // 左侧行号
@@ -1565,13 +1827,17 @@ public partial class GDStopLossMonitorWindow : Window
 
                 for (int col = 0; col < strategies.Length; col++)
                 {
+                    var strategy = strategies[col];
                     var cw = colWidths[col + 1];
-                    var products = sortedStrategyProducts[strategies[col]];
+
+                    // 判断当前行的品种是否在多个策略中出现（共振）
+                    var cellData = rowDict.TryGetValue(strategy, out var cellValue) ? cellValue : null;
                     var isRepeated = false;
-                    if (row < products.Count && repeatedProducts.Contains(products[row].productId))
+                    if (cellData.HasValue)
                     {
-                        isRepeated = true;
+                        isRepeated = repeatedProducts.Contains(cellData.Value.productId);
                     }
+
                     // 重复品种使用深灰色背景
                     if (isRepeated)
                         g.FillRectangle(new SolidBrush(Color.FromArgb(60, 60, 65)), x, y, cw, cellHeight);
@@ -1579,20 +1845,19 @@ public partial class GDStopLossMonitorWindow : Window
                         g.FillRectangle(new SolidBrush(Color.FromArgb(35, 35, 35)), x, y, cw, cellHeight);
                     g.DrawRectangle(gridPen, x, y, cw, cellHeight);
 
-                    if (row < products.Count)
+                    // 如果该列当前行有品种数据，则绘制
+                    if (cellData.HasValue)
                     {
-                        var (pId, direction) = products[row];
+                        var (pId, direction) = cellData.Value;
                         var color = direction.ToLower() == "long" ? Color.FromArgb(220, 80, 80) :
                                     direction.ToLower() == "short" ? Color.FromArgb(80, 200, 120) :
                                     Color.White;
                         using var productBrush = new SolidBrush(color);
                         var pSize = g.MeasureString(pId, cellFont);
-                        // 文字居中对齐
                         float drawX = x + (cw - pSize.Width) / 2;
                         float drawY = y + (cellHeight - pSize.Height) / 2;
                         if (pSize.Width > cw - 8)
                         {
-                            // 缩放字体适应列宽
                             float scale = (cw - 8) / pSize.Width;
                             using var scaledFont = new Font(System.Drawing.FontFamily.GenericMonospace, 10 * scale);
                             var scaledSize = g.MeasureString(pId, scaledFont);
@@ -1603,6 +1868,7 @@ public partial class GDStopLossMonitorWindow : Window
                             g.DrawString(pId, cellFont, productBrush, drawX, drawY);
                         }
                     }
+                    // 如果该列当前行没有品种数据，则留空（背景已绘制）
                     x += cw;
                 }
                 y += cellHeight;
