@@ -1053,7 +1053,7 @@ public partial class GDSignalConfigWindow : Window
 
             // 第二步：对候选品种逐个向上判定
             WriteToLogFile("CHECK", "");
-            WriteToLogFile("CHECK", $"【第二步】向上判定（方向一致性 + realTimeStopPriceDiffRate > 阈值）:");
+            WriteToLogFile("CHECK", $"【第二步】向上判定（方向一致性）:");
 
             int passCount = 0;
             foreach (var candidate in candidateProducts)
@@ -1081,30 +1081,18 @@ public partial class GDSignalConfigWindow : Window
                     // 如果方向为空，判定失败
                     if (string.IsNullOrEmpty(higherDir) || higherDir.Equals("none", StringComparison.OrdinalIgnoreCase))
                     {
-                        WriteToLogFile("CHECK", $"    {higherStrategy}: direction={higherDir}, realTimeStop=0.00%");
+                        WriteToLogFile("CHECK", $"    {higherStrategy}: direction={higherDir}");
                         WriteToLogFile("CHECK", $"      -> 方向为空，判定失败");
                         allMatch = false;
                         break;
                     }
                     
-                    var higherStop = higherStrategyData["realTimeStopPriceDiffRate"]?.Value<double>() ?? 0;
-
                     bool dirMatch = higherDir.Equals(candidate.direction, StringComparison.OrdinalIgnoreCase);
-                    bool stopHigherPass = !checkRealTimeStop || higherStop > realTimeStopThreshold;
-
-                    WriteToLogFile("CHECK", $"    {higherStrategy}: direction={higherDir}, realTimeStop={higherStop * 100:F2}%");
-                    WriteToLogFile("CHECK", $"      方向匹配:{dirMatch}, realTimeStop>{realTimeStopThreshold * 100:F2}%:{stopHigherPass}");
+                    WriteToLogFile("CHECK", $"    {higherStrategy}: direction={higherDir}, 方向匹配:{dirMatch}");
 
                     if (!dirMatch)
                     {
                         WriteToLogFile("CHECK", $"      -> 方向不一致，判定失败");
-                        allMatch = false;
-                        break;
-                    }
-
-                    if (!stopHigherPass)
-                    {
-                        WriteToLogFile("CHECK", $"      -> realTimeStop不满足条件，判定失败");
                         allMatch = false;
                         break;
                     }
