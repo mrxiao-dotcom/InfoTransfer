@@ -108,7 +108,7 @@ public partial class GDStopLossMonitorWindow : Window
     }
 
     // 加载历史数据用于比对
-    private Dictionary<string, List<(string productId, string direction)>>? LoadHistoryDataForCompare()
+    private Dictionary<string, List<(string productId, string direction, double remainingRisk)>>? LoadHistoryDataForCompare()
     {
         try
         {
@@ -120,12 +120,12 @@ public partial class GDStopLossMonitorWindow : Window
 
             if (result == null) return null;
 
-            var dict = new Dictionary<string, List<(string productId, string direction)>>();
+            var dict = new Dictionary<string, List<(string productId, string direction, double remainingRisk)>>();
             foreach (var kvp in result)
             {
                 var products = kvp.Value
                     .Where(d => d.ContainsKey("productId") && !string.IsNullOrEmpty(d["productId"]))
-                    .Select(d => (d["productId"], d.GetValueOrDefault("direction") ?? ""))
+                    .Select(d => (d["productId"], d.GetValueOrDefault("direction") ?? "", d.GetValueOrDefault("remainingRisk") != null ? double.Parse(d["remainingRisk"]) : 0.0))
                     .ToList();
                 dict[kvp.Key] = products;
             }
@@ -141,14 +141,14 @@ public partial class GDStopLossMonitorWindow : Window
     }
 
     // 保存历史数据 - 使用 Dictionary<string, List<Dictionary<string, string>>> 格式便于读取
-    private void SaveHistoryData(Dictionary<string, List<(string productId, string direction)>> filteredData)
+    private void SaveHistoryData(Dictionary<string, List<(string productId, string direction, double remainingRisk)>> filteredData)
     {
         try
         {
             // 转换为便于 JSON 序列化/反序列化的格式
             var saveData = filteredData.ToDictionary(
                 kvp => kvp.Key,
-                kvp => kvp.Value.Select(p => new Dictionary<string, string> { ["productId"] = p.productId, ["direction"] = p.direction }).ToList()
+                kvp => kvp.Value.Select(p => new Dictionary<string, string> { ["productId"] = p.productId, ["direction"] = p.direction, ["remainingRisk"] = p.remainingRisk.ToString() }).ToList()
             );
             var json = Newtonsoft.Json.JsonConvert.SerializeObject(saveData, Newtonsoft.Json.Formatting.Indented);
             File.WriteAllText(_historyFilePath, json);
@@ -780,7 +780,7 @@ public partial class GDStopLossMonitorWindow : Window
         var productFrequency = new Dictionary<string, int>();
         foreach (var kvp in currentFiltered)
         {
-            foreach (var (productId, _) in kvp.Value)
+            foreach (var (productId, _, _) in kvp.Value)
             {
                 if (productFrequency.ContainsKey(productId))
                     productFrequency[productId]++;
@@ -832,8 +832,8 @@ public partial class GDStopLossMonitorWindow : Window
 
             foreach (var strategy in enabledStrategies)
             {
-                var currentList = currentFiltered.TryGetValue(strategy, out var cl) ? cl : new List<(string productId, string direction)>();
-                var previousList = previousFiltered?.GetValueOrDefault(strategy) ?? new List<(string productId, string direction)>();
+                var currentList = currentFiltered.TryGetValue(strategy, out var cl) ? cl : new List<(string productId, string direction, double remainingRisk)>();
+                var previousList = previousFiltered?.GetValueOrDefault(strategy) ?? new List<(string productId, string direction, double remainingRisk)>();
 
                 var added = currentList.Where(cp => !previousList.Any(pp => pp.productId == cp.productId)).ToList();
                 var removed = previousList.Where(pp => !currentList.Any(cp => cp.productId == pp.productId)).ToList();
@@ -880,7 +880,7 @@ public partial class GDStopLossMonitorWindow : Window
                 var filtered = GetFilteredStrategyProducts(data, null);
                 foreach (var kvp in filtered)
                 {
-                    foreach (var (productId, direction) in kvp.Value)
+                    foreach (var (productId, direction, _) in kvp.Value)
                     {
                         sb.Append($"{productId}|{kvp.Key}|0|{direction};");
                     }
@@ -898,7 +898,7 @@ public partial class GDStopLossMonitorWindow : Window
                 var filtered = GetFilteredStrategyProducts(data, null);
                 foreach (var kvp in filtered)
                 {
-                    foreach (var (productId, direction) in kvp.Value)
+                    foreach (var (productId, direction, _) in kvp.Value)
                     {
                         sb.Append($"{productId}|{kvp.Key}|0|{direction};");
                     }
@@ -987,7 +987,7 @@ public partial class GDStopLossMonitorWindow : Window
 
     // 共享方法：获取过滤后的品种数据（应用GD15同向持仓规则）
     // JToken 版本：自动提取 data["data"] 部分
-    private Dictionary<string, List<(string productId, string direction)>> GetFilteredStrategyProducts(JToken rootData, List<string>? enabledStrategies = null)
+    private Dictionary<string, List<(string productId, string direction, double remainingRisk)>> GetFilteredStrategyProducts(JToken rootData, List<string>? enabledStrategies = null)
     {
         try
         {
@@ -1031,19 +1031,19 @@ public partial class GDStopLossMonitorWindow : Window
 
             if (dataArray == null)
             {
-                return new Dictionary<string, List<(string productId, string direction)>>();
+                return new Dictionary<string, List<(string productId, string direction, double remainingRisk)>>();
             }
 
             return GetFilteredStrategyProducts(dataArray, enabledStrategies);
         }
         catch
         {
-            return new Dictionary<string, List<(string productId, string direction)>>();
+            return new Dictionary<string, List<(string productId, string direction, double remainingRisk)>>();
         }
     }
 
     // JArray 版本
-    private Dictionary<string, List<(string productId, string direction)>> GetFilteredStrategyProducts(JArray dataArray, List<string>? enabledStrategies = null)
+    private Dictionary<string, List<(string productId, string direction, double remainingRisk)>> GetFilteredStrategyProducts(JArray dataArray, List<string>? enabledStrategies = null)
     {
         // 检查是否是需要转换的表格格式 {columns: [...], data: [[...], [...], ...]}
         // 表格格式的特征：第一个元素是数组
@@ -1057,10 +1057,10 @@ public partial class GDStopLossMonitorWindow : Window
         var strategiesToUse = enabledStrategies?.Count > 0 ? enabledStrategies : allStrategies.ToList();
         var enabledSet = new HashSet<string>(strategiesToUse);
 
-        var result = new Dictionary<string, List<(string productId, string direction)>>();
+        var result = new Dictionary<string, List<(string productId, string direction, double remainingRisk)>>();
         foreach (var strategy in strategiesToUse)
         {
-            result[strategy] = new List<(string, string)>();
+            result[strategy] = new List<(string, string, double)>();
         }
 
         foreach (var productData in dataArray)
@@ -1117,35 +1117,35 @@ public partial class GDStopLossMonitorWindow : Window
                 var rate = strategyData["totalRealTimeStopPriceDiffRate"]?.Value<double>() ?? 0;
                 var direction = strategyData["direction"]?.ToString() ?? "";
                 var remainingRisk = strategyData["remainingRisk"]?.Value<double>() ?? 0;
-                if (rate >= 0 && direction != "None" && remainingRisk >= 0)
-                {
-                    // 判断已勾选的更高策略是否同向持仓（只检查已勾选的更高策略）
-                    var higherStrategies = GetHigherStrategies(strategy, allStrategies, enabledSet);
-                    if (productId == "I" || productId == "JD")
+                    if (rate >= 0 && direction != "None" && remainingRisk >= 0)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 {productId} - 检查策略 {strategy}, higherStrategies={string.Join(",", higherStrategies)}");
-                    }
-                    if (higherStrategies.Length > 0)
-                    {
-                        var allHigherMatch = higherStrategies.All(hs =>
-                            enabledPositions.TryGetValue(hs, out var higherDir) && higherDir == direction);
-                        if (!allHigherMatch)
+                        // 判断已勾选的更高策略是否同向持仓（只检查已勾选的更高策略）
+                        var higherStrategies = GetHigherStrategies(strategy, allStrategies, enabledSet);
+                        if (productId == "I" || productId == "JD")
                         {
-                            if (productId == "I" || productId == "JD")
-                            {
-                                System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 {productId} - 策略 {strategy} 因更高策略方向不匹配而跳过");
-                            }
-                            continue;
+                            System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 {productId} - 检查策略 {strategy}, higherStrategies={string.Join(",", higherStrategies)}");
                         }
-                    }
-                    result[strategy].Add((productId, direction));
-                    if (productId == "I" || productId == "JD")
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 {productId} - 策略 {strategy} 通过筛选，加入结果");
+                        if (higherStrategies.Length > 0)
+                        {
+                            var allHigherMatch = higherStrategies.All(hs =>
+                                enabledPositions.TryGetValue(hs, out var higherDir) && higherDir == direction);
+                            if (!allHigherMatch)
+                            {
+                                if (productId == "I" || productId == "JD")
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 {productId} - 策略 {strategy} 因更高策略方向不匹配而跳过");
+                                }
+                                continue;
+                            }
+                        }
+                        result[strategy].Add((productId, direction, remainingRisk));
+                        if (productId == "I" || productId == "JD")
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 {productId} - 策略 {strategy} 通过筛选，加入结果");
+                        }
                     }
                 }
             }
-        }
 
         // 调试日志：输出最终结果
         System.Diagnostics.Debug.WriteLine($"[DEBUG] 筛选完成，GD15品种数: {result.GetValueOrDefault("GD15")?.Count ?? 0}");
@@ -1162,7 +1162,7 @@ public partial class GDStopLossMonitorWindow : Window
     }
 
     // 处理表格格式数据：{columns: [...], data: [[...], [...], ...]}
-    private Dictionary<string, List<(string productId, string direction)>> GetFilteredStrategyProductsFromTableFormat(JArray dataArray, List<string>? enabledStrategies = null)
+    private Dictionary<string, List<(string productId, string direction, double remainingRisk)>> GetFilteredStrategyProductsFromTableFormat(JArray dataArray, List<string>? enabledStrategies = null)
     {
         var debugLog = new StringBuilder();
         debugLog.AppendLine($"[DEBUG] GetFilteredStrategyProductsFromTableFormat 开始执行");
@@ -1175,7 +1175,7 @@ public partial class GDStopLossMonitorWindow : Window
         {
             debugLog.AppendLine("[DEBUG] columns为空，返回空结果");
             LogToDebugFile(debugLog.ToString());
-            return new Dictionary<string, List<(string productId, string direction)>>();
+            return new Dictionary<string, List<(string productId, string direction, double remainingRisk)>>();
         }
 
         var allStrategies = new[] { "GD15", "GD20", "GD25", "GD30", "GD35", "GD40" };
@@ -1183,10 +1183,10 @@ public partial class GDStopLossMonitorWindow : Window
         var enabledSet = new HashSet<string>(strategiesToUse);
         debugLog.AppendLine($"[DEBUG] strategiesToUse = {string.Join(", ", strategiesToUse)}");
 
-        var result = new Dictionary<string, List<(string productId, string direction)>>();
+        var result = new Dictionary<string, List<(string productId, string direction, double remainingRisk)>>();
         foreach (var strategy in strategiesToUse)
         {
-            result[strategy] = new List<(string, string)>();
+            result[strategy] = new List<(string, string, double)>();
         }
 
         // 找出各列的索引（优先使用 totalRealTimeStopPriceDiffRate）
@@ -1328,7 +1328,7 @@ public partial class GDStopLossMonitorWindow : Window
 
         foreach (var strategy in strategiesToUse)
         {
-            result[strategy] = new List<(string, string)>();
+            result[strategy] = new List<(string, string, double)>();
 
             // 4.1 添加共振品种（按统一顺序）
             foreach (var productId in resonanceProducts)
@@ -1336,7 +1336,7 @@ public partial class GDStopLossMonitorWindow : Window
                 if (productStrategyData.TryGetValue(productId, out var stratData) &&
                     stratData.TryGetValue(strategy, out var data))
                 {
-                    result[strategy].Add((productId, data.direction));
+                    result[strategy].Add((productId, data.direction, data.remainingRisk));
                 }
                 // 如果该策略没有这个品种，该行留空（不添加）
             }
@@ -1347,7 +1347,7 @@ public partial class GDStopLossMonitorWindow : Window
                 if (productStrategyData.TryGetValue(productId, out var stratData) &&
                     stratData.TryGetValue(strategy, out var data))
                 {
-                    result[strategy].Add((productId, data.direction));
+                    result[strategy].Add((productId, data.direction, data.remainingRisk));
                 }
             }
 
@@ -1381,8 +1381,8 @@ public partial class GDStopLossMonitorWindow : Window
 
     // 根据过滤后的数据构建变化描述
     private string BuildChangeDescriptionFromFiltered(
-        Dictionary<string, List<(string productId, string direction)>> currentFiltered,
-        Dictionary<string, List<(string productId, string direction)>>? previousFiltered,
+        Dictionary<string, List<(string productId, string direction, double remainingRisk)>> currentFiltered,
+        Dictionary<string, List<(string productId, string direction, double remainingRisk)>>? previousFiltered,
         out List<(string strategy, string productId, bool isAdded)> changedProducts)
     {
         changedProducts = new List<(string, string, bool)>();
@@ -1392,8 +1392,8 @@ public partial class GDStopLossMonitorWindow : Window
         foreach (var strategy in allStrategies)
         {
             if (!currentFiltered.TryGetValue(strategy, out var currentList))
-                currentList = new List<(string, string)>();
-            var previousList = previousFiltered?.GetValueOrDefault(strategy) ?? new List<(string, string)>();
+                currentList = new List<(string, string, double)>();
+            var previousList = previousFiltered?.GetValueOrDefault(strategy) ?? new List<(string, string, double)>();
 
             var added = currentList.Where(cp => !previousList.Any(pp => pp.productId == cp.productId)).ToList();
             var removed = previousList.Where(pp => !currentList.Any(cp => cp.productId == pp.productId)).ToList();
@@ -1428,8 +1428,8 @@ public partial class GDStopLossMonitorWindow : Window
     // 防闪烁检查：如果品种在5分钟内状态发生过变化，但现在又回到了之前的状态，则忽略这次变化
     private List<(string strategy, string productId, bool isAdded)> FilterFlickerChanges(
         List<(string strategy, string productId, bool isAdded)> changedProducts,
-        Dictionary<string, List<(string productId, string direction)>> currentFiltered,
-        Dictionary<string, List<(string productId, string direction)>>? previousFiltered)
+        Dictionary<string, List<(string productId, string direction, double remainingRisk)>> currentFiltered,
+        Dictionary<string, List<(string productId, string direction, double remainingRisk)>>? previousFiltered)
     {
         var filteredChanges = new List<(string strategy, string productId, bool isAdded)>();
         var now = DateTime.Now;
@@ -1468,8 +1468,8 @@ public partial class GDStopLossMonitorWindow : Window
     // 根据过滤后的变化列表构建变化描述文本
     private string BuildFilteredChangeText(
         List<(string strategy, string productId, bool isAdded)> filteredChanges,
-        Dictionary<string, List<(string productId, string direction)>> currentFiltered,
-        Dictionary<string, List<(string productId, string direction)>>? previousFiltered)
+        Dictionary<string, List<(string productId, string direction, double remainingRisk)>> currentFiltered,
+        Dictionary<string, List<(string productId, string direction, double remainingRisk)>>? previousFiltered)
     {
         if (filteredChanges.Count == 0) return "";
 
@@ -1534,8 +1534,8 @@ public partial class GDStopLossMonitorWindow : Window
         foreach (var strategy in allStrategies)
         {
             if (!currentFiltered.TryGetValue(strategy, out var currentList))
-                currentList = new List<(string, string)>();
-            var previousList = previousFiltered?.GetValueOrDefault(strategy) ?? new List<(string, string)>();
+                currentList = new List<(string, string, double)>();
+            var previousList = previousFiltered?.GetValueOrDefault(strategy) ?? new List<(string, string, double)>();
 
             var added = currentList.Where(cp => !previousList.Any(pp => pp.productId == cp.productId)).ToList();
             var removed = previousList.Where(pp => !currentList.Any(cp => cp.productId == pp.productId)).ToList();
@@ -1576,7 +1576,7 @@ public partial class GDStopLossMonitorWindow : Window
             Log("DEBUG", $"[BuildImageData] enabledStrategies: {string.Join(",", enabledStrategies)}");
             foreach (var strategy in enabledStrategies)
             {
-                var products = strategyProducts.GetValueOrDefault(strategy) ?? new List<(string, string)>();
+                var products = strategyProducts.GetValueOrDefault(strategy) ?? new List<(string, string, double)>();
                 Log("DEBUG", $"[BuildImageData] {strategy} 品种: {string.Join(",", products.Select(p => p.productId))}");
             }
 
@@ -1587,7 +1587,7 @@ public partial class GDStopLossMonitorWindow : Window
             var productStrategies = new Dictionary<string, List<string>>();
             foreach (var strategy in strategies)
             {
-                foreach (var (productId, _) in strategyProducts[strategy])
+                foreach (var (productId, _, _) in strategyProducts[strategy])
                 {
                     if (!productStrategies.ContainsKey(productId))
                         productStrategies[productId] = new List<string>();
@@ -1620,11 +1620,11 @@ public partial class GDStopLossMonitorWindow : Window
             // 2. 单策略品种：在共振品种之后，按各自策略的顺序排列（不占用共振行）
             var finalProductOrder = new List<string>(resonanceProducts);
 
-            // 构建排序后的品种数据
-            var sortedStrategyProducts = new Dictionary<string, List<(string productId, string direction)>>();
+            // 构建排序后的品种数据（包含 remainingRisk）
+            var sortedStrategyProducts = new Dictionary<string, List<(string productId, string direction, double remainingRisk)>>();
             foreach (var strategy in strategies)
             {
-                sortedStrategyProducts[strategy] = new List<(string, string)>();
+                sortedStrategyProducts[strategy] = new List<(string, string, double)>();
             }
 
             // 第一步：添加共振品种（按统一顺序）
@@ -1648,12 +1648,12 @@ public partial class GDStopLossMonitorWindow : Window
             foreach (var strategy in strategies)
             {
                 var originalList = strategyProducts[strategy];
-                foreach (var (productId, direction) in originalList)
+                foreach (var (productId, direction, remainingRisk) in originalList)
                 {
                     // 只添加单策略品种（不在共振品种列表中）
                     if (!resonanceProducts.Contains(productId))
                     {
-                        sortedStrategyProducts[strategy].Add((productId, direction));
+                        sortedStrategyProducts[strategy].Add((productId, direction, remainingRisk));
                     }
                 }
             }
@@ -1736,8 +1736,8 @@ public partial class GDStopLossMonitorWindow : Window
             if (maxRows == 0) return null;
 
             // ========== 计算每行应该显示什么品种 ==========
-            // row -> strategy -> (productId, direction) or null
-            var rowDisplayData = new List<Dictionary<string, (string productId, string direction)?>>();
+            // row -> strategy -> (productId, direction, remainingRisk) or null
+            var rowDisplayData = new List<Dictionary<string, (string productId, string direction, double remainingRisk)?>>();
             var totalRows = resonanceRowCount + sortedStrategyProducts.Values.Max(list =>
             {
                 // 单策略品种的最大数量
@@ -1748,14 +1748,14 @@ public partial class GDStopLossMonitorWindow : Window
             for (int i = 0; i < resonanceProducts.Count; i++)
             {
                 var productId = resonanceProducts[i];
-                var rowDict = new Dictionary<string, (string productId, string direction)?>();
+                var rowDict = new Dictionary<string, (string productId, string direction, double remainingRisk)?>();
                 foreach (var strategy in strategies)
                 {
                     var list = sortedStrategyProducts[strategy];
                     var item = list.FirstOrDefault(p => p.productId == productId);
                     if (item.productId != null)
                     {
-                        rowDict[strategy] = item;
+                        rowDict[strategy] = item; // 包含 remainingRisk
                     }
                     else
                     {
@@ -1778,9 +1778,9 @@ public partial class GDStopLossMonitorWindow : Window
                         // 确保这一行存在
                         while (rowDisplayData.Count <= resonanceRowCount + offset)
                         {
-                            rowDisplayData.Add(new Dictionary<string, (string productId, string direction)?>());
+                            rowDisplayData.Add(new Dictionary<string, (string productId, string direction, double remainingRisk)?>());
                         }
-                        rowDisplayData[resonanceRowCount + offset][strategy] = product;
+                        rowDisplayData[resonanceRowCount + offset][strategy] = (product.productId, product.direction, product.remainingRisk);
                         offset++;
                     }
                 }
@@ -1935,14 +1935,16 @@ public partial class GDStopLossMonitorWindow : Window
                     // 如果该列当前行有品种数据，则绘制
                     if (cellData.HasValue)
                     {
-                        var (pId, direction) = cellData.Value;
+                        var (pId, direction, remainingRisk) = cellData.Value;
                         var color = direction.ToLower() == "long" ? Color.FromArgb(220, 80, 80) :
                                     direction.ToLower() == "short" ? Color.FromArgb(80, 200, 120) :
                                     Color.White;
                         using var productBrush = new SolidBrush(color);
+                        
+                        // 合约名（上方）
                         var pSize = g.MeasureString(pId, cellFont);
                         float drawX = x + (cw - pSize.Width) / 2;
-                        float drawY = y + (cellHeight - pSize.Height) / 2;
+                        float drawY = y + 2; // 上方留2像素
                         if (pSize.Width > cw - 8)
                         {
                             float scale = (cw - 8) / pSize.Width;
@@ -1954,6 +1956,15 @@ public partial class GDStopLossMonitorWindow : Window
                         {
                             g.DrawString(pId, cellFont, productBrush, drawX, drawY);
                         }
+                        
+                        // remainingRisk 百分比（下方）
+                        var riskText = $"{remainingRisk * 100:F2}%";
+                        using var riskFont = new Font(System.Drawing.FontFamily.GenericMonospace, 7);
+                        var riskSize = g.MeasureString(riskText, riskFont);
+                        float riskDrawX = x + (cw - riskSize.Width) / 2;
+                        float riskDrawY = y + cellHeight - riskSize.Height - 2; // 下方留2像素
+                        using var riskBrush = new SolidBrush(Color.FromArgb(180, 180, 180)); // 浅灰色
+                        g.DrawString(riskText, riskFont, riskBrush, riskDrawX, riskDrawY);
                     }
                     // 如果该列当前行没有品种数据，则留空（背景已绘制）
                     x += cw;
