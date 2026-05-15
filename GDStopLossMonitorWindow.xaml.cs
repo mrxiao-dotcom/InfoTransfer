@@ -490,6 +490,13 @@ public partial class GDStopLossMonitorWindow : Window
             var changeDescription = "";
             var changedProducts = new List<(string strategy, string productId, bool isAdded)>();
 
+            // 调试日志：输出当前数据的品种统计
+            Log("DEBUG", $"[ProcessSignalData] isFirstPush={isFirstPush}");
+            foreach (var kvp in currentFiltered)
+            {
+                Log("DEBUG", $"[ProcessSignalData] 当前数据 - {kvp.Key}: {string.Join(",", kvp.Value.Select(p => p.productId))}");
+            }
+
             // 尝试加载历史数据进行比对
             var historyFiltered = LoadHistoryDataForCompare();
             var previousFiltered = historyFiltered ?? (_lastPushData != null ? GetFilteredStrategyProducts(_lastPushData, enabledStrategies) : null);
@@ -1087,7 +1094,8 @@ public partial class GDStopLossMonitorWindow : Window
                     var rate = strategyData["totalRealTimeStopPriceDiffRate"]?.Value<double>() ?? 0;
                     var direction = strategyData["direction"]?.ToString() ?? "";
                     var remainingRisk = strategyData["remainingRisk"]?.Value<double>() ?? 0;
-                    if (productId == "I" || productId == "JD")
+                    // 调试日志：追踪所有品种的筛选过程
+                    if (productId == "SR" || productId == "I" || productId == "JD")
                     {
                         System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 {productId} - {strategyName}: rate={rate:F6}, direction={direction}, remainingRisk={remainingRisk:F4}");
                     }
@@ -1104,7 +1112,7 @@ public partial class GDStopLossMonitorWindow : Window
                 }
             }
 
-            if (productId == "I" || productId == "JD")
+            if (productId == "SR" || productId == "I" || productId == "JD")
             {
                 System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 {productId} - enabledPositions: {string.Join(",", enabledPositions.Select(kv => $"{kv.Key}={kv.Value}"))}");
             }
@@ -1117,38 +1125,42 @@ public partial class GDStopLossMonitorWindow : Window
                 var rate = strategyData["totalRealTimeStopPriceDiffRate"]?.Value<double>() ?? 0;
                 var direction = strategyData["direction"]?.ToString() ?? "";
                 var remainingRisk = strategyData["remainingRisk"]?.Value<double>() ?? 0;
-                    if (rate >= 0 && direction != "None" && remainingRisk >= 0)
+                if (rate >= 0 && direction != "None" && remainingRisk >= 0)
+                {
+                    // 判断已勾选的更高策略是否同向持仓（只检查已勾选的更高策略）
+                    var higherStrategies = GetHigherStrategies(strategy, allStrategies, enabledSet);
+                    if (productId == "SR" || productId == "I" || productId == "JD")
                     {
-                        // 判断已勾选的更高策略是否同向持仓（只检查已勾选的更高策略）
-                        var higherStrategies = GetHigherStrategies(strategy, allStrategies, enabledSet);
-                        if (productId == "I" || productId == "JD")
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 {productId} - 检查策略 {strategy}, higherStrategies={string.Join(",", higherStrategies)}");
+                    }
+                    if (higherStrategies.Length > 0)
+                    {
+                        var allHigherMatch = higherStrategies.All(hs =>
+                            enabledPositions.TryGetValue(hs, out var higherDir) && higherDir == direction);
+                        if (!allHigherMatch)
                         {
-                            System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 {productId} - 检查策略 {strategy}, higherStrategies={string.Join(",", higherStrategies)}");
-                        }
-                        if (higherStrategies.Length > 0)
-                        {
-                            var allHigherMatch = higherStrategies.All(hs =>
-                                enabledPositions.TryGetValue(hs, out var higherDir) && higherDir == direction);
-                            if (!allHigherMatch)
+                            if (productId == "SR" || productId == "I" || productId == "JD")
                             {
-                                if (productId == "I" || productId == "JD")
-                                {
-                                    System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 {productId} - 策略 {strategy} 因更高策略方向不匹配而跳过");
-                                }
-                                continue;
+                                System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 {productId} - 策略 {strategy} 因更高策略方向不匹配而跳过");
                             }
+                            continue;
                         }
-                        result[strategy].Add((productId, direction, remainingRisk));
-                        if (productId == "I" || productId == "JD")
-                        {
-                            System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 {productId} - 策略 {strategy} 通过筛选，加入结果");
-                        }
+                    }
+                    result[strategy].Add((productId, direction, remainingRisk));
+                    if (productId == "SR" || productId == "I" || productId == "JD")
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 {productId} - 策略 {strategy} 通过筛选，加入结果");
                     }
                 }
             }
+        }
 
         // 调试日志：输出最终结果
         System.Diagnostics.Debug.WriteLine($"[DEBUG] 筛选完成，GD15品种数: {result.GetValueOrDefault("GD15")?.Count ?? 0}");
+        if (result.GetValueOrDefault("GD15")?.Any(p => p.productId == "SR") == true)
+        {
+            System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 SR 在 GD15 结果中!");
+        }
         if (result.GetValueOrDefault("GD15")?.Any(p => p.productId == "I") == true)
         {
             System.Diagnostics.Debug.WriteLine($"[DEBUG] 品种 I 在 GD15 结果中!");
@@ -1387,13 +1399,27 @@ public partial class GDStopLossMonitorWindow : Window
     {
         changedProducts = new List<(string, string, bool)>();
         var sb = new StringBuilder();
-        var allStrategies = new[] { "GD15", "GD20", "GD25", "GD30", "GD35", "GD40" };
 
-        foreach (var strategy in allStrategies)
+        // 调试日志
+        System.Diagnostics.Debug.WriteLine($"[BuildChangeDescriptionFromFiltered] currentFiltered.Count={currentFiltered.Count}");
+        foreach (var kvp in currentFiltered)
         {
-            if (!currentFiltered.TryGetValue(strategy, out var currentList))
-                currentList = new List<(string, string, double)>();
-            var previousList = previousFiltered?.GetValueOrDefault(strategy) ?? new List<(string, string, double)>();
+            System.Diagnostics.Debug.WriteLine($"[BuildChangeDescriptionFromFiltered] 当前 {kvp.Key}: {string.Join(",", kvp.Value.Select(p => p.productId))}");
+        }
+        if (previousFiltered != null)
+        {
+            System.Diagnostics.Debug.WriteLine($"[BuildChangeDescriptionFromFiltered] previousFiltered.Count={previousFiltered.Count}");
+            foreach (var kvp in previousFiltered)
+            {
+                System.Diagnostics.Debug.WriteLine($"[BuildChangeDescriptionFromFiltered] 历史 {kvp.Key}: {string.Join(",", kvp.Value.Select(p => p.productId))}");
+            }
+        }
+
+        // 只遍历 currentFiltered 中实际存在的策略，避免显示未勾选策略的"减少"变化
+        foreach (var strategy in currentFiltered.Keys)
+        {
+            var currentList = currentFiltered[strategy];
+            var previousList = previousFiltered?.GetValueOrDefault(strategy) ?? new List<(string productId, string direction, double remainingRisk)>();
 
             var added = currentList.Where(cp => !previousList.Any(pp => pp.productId == cp.productId)).ToList();
             var removed = previousList.Where(pp => !currentList.Any(cp => cp.productId == pp.productId)).ToList();
@@ -1474,9 +1500,9 @@ public partial class GDStopLossMonitorWindow : Window
         if (filteredChanges.Count == 0) return "";
 
         var sb = new StringBuilder();
-        var allStrategies = new[] { "GD15", "GD20", "GD25", "GD30", "GD35", "GD40" };
 
-        foreach (var strategy in allStrategies)
+        // 只遍历有变化的策略，避免显示未勾选策略的"减少"变化
+        foreach (var strategy in filteredChanges.Select(c => c.strategy).Distinct())
         {
             var strategyChanges = filteredChanges.Where(c => c.strategy == strategy).ToList();
             if (strategyChanges.Count == 0) continue;
@@ -1512,15 +1538,14 @@ public partial class GDStopLossMonitorWindow : Window
         if (previousData == null) return "首次推送";
 
         var sb = new StringBuilder();
-        var allStrategies = new[] { "GD15", "GD20", "GD25", "GD30", "GD35", "GD40" };
         
         // 获取已勾选的策略
         var enabledStrategies = GetEnabledStrategies();
         System.Diagnostics.Debug.WriteLine($"[DEBUG] BuildChangeDescription - enabledStrategies: {string.Join(",", enabledStrategies)}");
 
-        // 使用共享方法获取过滤后的数据
-        var currentFiltered = GetFilteredStrategyProducts(currentData);
-        var previousFiltered = previousData != null ? GetFilteredStrategyProducts(previousData) : null;
+        // 使用共享方法获取过滤后的数据（传入 enabledStrategies 保证与图片生成逻辑一致）
+        var currentFiltered = GetFilteredStrategyProducts(currentData, enabledStrategies);
+        var previousFiltered = previousData != null ? GetFilteredStrategyProducts(previousData, enabledStrategies) : null;
         
         // 调试：输出 GD15 的品种列表
         if (currentFiltered.TryGetValue("GD15", out var gd15List))
@@ -1531,11 +1556,11 @@ public partial class GDStopLossMonitorWindow : Window
         // 调试：检查 JD 是否在数据中
         System.Diagnostics.Debug.WriteLine($"[DEBUG] BuildChangeDescription - JD 在 GD15 中: {currentFiltered.GetValueOrDefault("GD15")?.Any(p => p.productId == "JD")}");
 
-        foreach (var strategy in allStrategies)
+        foreach (var strategy in enabledStrategies)
         {
             if (!currentFiltered.TryGetValue(strategy, out var currentList))
-                currentList = new List<(string, string, double)>();
-            var previousList = previousFiltered?.GetValueOrDefault(strategy) ?? new List<(string, string, double)>();
+                currentList = new List<(string productId, string direction, double remainingRisk)>();
+            var previousList = previousFiltered?.GetValueOrDefault(strategy) ?? new List<(string productId, string direction, double remainingRisk)>();
 
             var added = currentList.Where(cp => !previousList.Any(pp => pp.productId == cp.productId)).ToList();
             var removed = previousList.Where(pp => !currentList.Any(cp => cp.productId == pp.productId)).ToList();
@@ -1765,23 +1790,18 @@ public partial class GDStopLossMonitorWindow : Window
                 rowDisplayData.Add(rowDict);
             }
 
-            // 单策略品种行：按各自策略的顺序追加
+            // 单策略品种行：每个策略独立一行（不覆盖其他策略的品种）
             foreach (var strategy in strategies)
             {
-                var list = strategyProducts[strategy]; // 使用原始列表
-                int offset = 0;
+                var list = strategyProducts[strategy];
                 foreach (var product in list)
                 {
                     // 只添加单策略品种（不在共振品种列表中）
                     if (!resonanceProducts.Contains(product.productId))
                     {
-                        // 确保这一行存在
-                        while (rowDisplayData.Count <= resonanceRowCount + offset)
-                        {
-                            rowDisplayData.Add(new Dictionary<string, (string productId, string direction, double remainingRisk)?>());
-                        }
-                        rowDisplayData[resonanceRowCount + offset][strategy] = (product.productId, product.direction, product.remainingRisk);
-                        offset++;
+                        var rowDict = new Dictionary<string, (string productId, string direction, double remainingRisk)?>();
+                        rowDict[strategy] = (product.productId, product.direction, product.remainingRisk);
+                        rowDisplayData.Add(rowDict);
                     }
                 }
             }
@@ -1808,6 +1828,25 @@ public partial class GDStopLossMonitorWindow : Window
                 var row = rowDisplayData[i];
                 var rowContent = string.Join(", ", row.Select(kv => $"{kv.Key}={kv.Value?.productId ?? "空"}"));
                 Log("DEBUG", $"[BuildImageData] 行{i}: {rowContent}");
+            }
+
+            // 调试日志：检查 SR 品种是否在 rowDisplayData 中
+            var srFound = false;
+            for (int i = 0; i < rowDisplayData.Count; i++)
+            {
+                var row = rowDisplayData[i];
+                foreach (var kv in row)
+                {
+                    if (kv.Value?.productId == "SR")
+                    {
+                        srFound = true;
+                        Log("DEBUG", $"[BuildImageData] ★ SR 品种在行{i}, 策略={kv.Key}, 方向={kv.Value?.direction}");
+                    }
+                }
+            }
+            if (!srFound)
+            {
+                Log("DEBUG", $"[BuildImageData] ⚠️ SR 品种未在 rowDisplayData 中找到!");
             }
 
             int cellHeight = 28;
@@ -1849,7 +1888,8 @@ public partial class GDStopLossMonitorWindow : Window
 
             // 首次或不显示变化信息时，changeInfoAreaHeight为0
             int changeInfoAreaHeight = 0;
-            int imgHeight = padding * 2 + headerHeight + titleHeight + cellHeight * maxRows + 10 + changeInfoAreaHeight;
+            // 使用 totalRows 而不是 maxRows，确保图片高度能容纳所有行（包括单策略品种）
+            int imgHeight = padding * 2 + headerHeight + titleHeight + cellHeight * totalRows + 10 + changeInfoAreaHeight;
 
             // 计算图片宽度：基于所有列的宽度之和
             int imgWidth = padding * 2 + colWidths.Sum();
