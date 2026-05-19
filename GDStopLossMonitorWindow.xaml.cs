@@ -42,8 +42,24 @@ public partial class GDStopLossMonitorWindow : Window
     private System.Windows.Threading.DispatcherTimer? _uiTimer;
     private System.Windows.Threading.DispatcherTimer? _heartbeatTimer;
     private DateTime? _lastHeartbeatSent;
+    private DateTime _lastFlickerCacheCleanup = DateTime.MinValue;
+    private const int FlickerCacheCleanupIntervalMinutes = 10;
+    private List<TerminalConfig>? _cachedTerminalConfigs;
+    private DateTime _lastTerminalCacheRefresh = DateTime.MinValue;
+    private const int TerminalCacheRefreshIntervalSeconds = 30;
     private readonly string _historyFilePath;
     private readonly string _debugFilePath;
+
+    private List<TerminalConfig> GetCachedTerminalConfigs()
+    {
+        var now = DateTime.Now;
+        if (_cachedTerminalConfigs == null || (now - _lastTerminalCacheRefresh).TotalSeconds > TerminalCacheRefreshIntervalSeconds)
+        {
+            _cachedTerminalConfigs = _databaseService.GetAllTerminalConfigs();
+            _lastTerminalCacheRefresh = now;
+        }
+        return _cachedTerminalConfigs;
+    }
 
     public GDStopLossMonitorWindow(DatabaseService databaseService, ConfigService configService, Action<string, string> logCallback)
     {
@@ -391,7 +407,7 @@ public partial class GDStopLossMonitorWindow : Window
         Log("INFO", "========== 盘中止损监测已停止 ==========");
     }
 
-    // 检查并发送心跳（交易日9:00和15:00发送存活通知）
+    // 检查并发送心跳（交易日9:00、15:00和21:00发送存活通知）
     private async Task CheckAndSendHeartbeatAsync()
     {
         if (!_isMonitoring) return;
@@ -407,8 +423,8 @@ public partial class GDStopLossMonitorWindow : Window
         // 检查是否是节假日
         if (IsHoliday(now)) return;
 
-        // 只在9:00和15:00整点发送
-        if (now.Minute != 0 || (now.Hour != 9 && now.Hour != 15))
+        // 只在9:00、15:00和21:00整点发送
+        if (now.Minute != 0 || (now.Hour != 9 && now.Hour != 15 && now.Hour != 21))
         {
             return;
         }
@@ -464,6 +480,9 @@ public partial class GDStopLossMonitorWindow : Window
             });
 
             Log("INFO", $"[{DateTime.Now:HH:mm:ss}] 开始执行监测...");
+
+            // 定期清理过期的闪烁缓存（每10分钟清理一次）
+            CleanupExpiredFlickerCache();
 
             // 检查是否在监控时间段内
             if (!IsInMonitorPeriod())
@@ -570,10 +589,12 @@ public partial class GDStopLossMonitorWindow : Window
                     {
                         pushSuccess = true;
 
-                        // 非首次推送且有变化内容时，发送文字消息
-                        if (sendText && !isFirstPush && !string.IsNullOrEmpty(changeDescription))
+                        // 发送文字消息（首次推送也发送）
+                        if (sendText)
                         {
-                            var textContent = BuildPushContent(data, changeDescription);
+                            var textContent = !string.IsNullOrEmpty(changeDescription)
+                                ? BuildPushContent(data, changeDescription)
+                                : BuildPushContent(data, "品种池已更新");
                             if (textContent != null)
                             {
                                 await PushTextToFeishuAsync(textContent);
@@ -629,6 +650,34 @@ public partial class GDStopLossMonitorWindow : Window
             }
             catch { }
         }
+    }
+
+    private void CleanupExpiredFlickerCache()
+    {
+        var now = DateTime.Now;
+        // 每10分钟清理一次
+        if ((now - _lastFlickerCacheCleanup).TotalMinutes < FlickerCacheCleanupIntervalMinutes)
+            return;
+
+        lock (_flickerLock)
+        {
+            var expiredKeys = _flickerCache
+                .Where(kvp => (now - kvp.Value).TotalMinutes > FlickerCacheMinutes)
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            foreach (var key in expiredKeys)
+            {
+                _flickerCache.Remove(key);
+            }
+
+            if (expiredKeys.Count > 0)
+            {
+                Log("DEBUG", $"[缓存清理] 已清理 {expiredKeys.Count} 条过期闪烁缓存，剩余 {_flickerCache.Count} 条");
+            }
+        }
+
+        _lastFlickerCacheCleanup = now;
     }
 
     private bool IsInMonitorPeriod()
@@ -1850,7 +1899,7 @@ public partial class GDStopLossMonitorWindow : Window
             }
 
             int cellHeight = 28;
-            int titleHeight = 36;
+            int titleHeight = 50; // 增大高度以容纳标题和时间两行
             int rowNumColWidth = 40;
             int padding = 20;
             int headerHeight = 50;
@@ -1865,12 +1914,16 @@ public partial class GDStopLossMonitorWindow : Window
             using var tempG = Graphics.FromImage(tempBitmap);
             tempG.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
 
+            // 判断是否只有3个品种，如果是则列宽增加30%
+            int totalProducts = sortedStrategyProducts.Values.Sum(list => list.Count);
+            double widthMultiplier = totalProducts <= 3 ? 1.3 : 1.0;
+
             // 计算每列宽度：基于品种名实际宽度 + 策略名宽度
             var colWidths = new List<int> { rowNumColWidth }; // 第一列是行号
             foreach (var strategy in strategies)
             {
                 var headerW = tempG.MeasureString(strategy, headerFont).Width + 16;
-                colWidths.Add((int)Math.Ceiling(headerW));
+                colWidths.Add((int)Math.Ceiling(headerW * widthMultiplier));
             }
 
             // 动态调整策略列宽度：取该列中最长品种名的宽度
@@ -1880,7 +1933,7 @@ public partial class GDStopLossMonitorWindow : Window
                 if (productList.Count > 0)
                 {
                     var maxProductW = productList.Max(p => tempG.MeasureString(p.productId, cellFont).Width);
-                    var targetW = (int)Math.Ceiling(maxProductW) + 16;
+                    var targetW = (int)Math.Ceiling(maxProductW * widthMultiplier) + 16;
                     if (targetW > colWidths[i + 1])
                         colWidths[i + 1] = targetW;
                 }
@@ -1905,9 +1958,10 @@ public partial class GDStopLossMonitorWindow : Window
             using var headerBrush = new SolidBrush(Color.FromArgb(100, 180, 255));
             using var gridPen = new Pen(Color.FromArgb(80, 80, 80), 1);
 
-            var titleText = $"趋势品种池 {DateTime.Now:yyyy-MM-dd HH:mm}";
-            var titleSize = g.MeasureString(titleText, titleFont);
-            g.DrawString(titleText, titleFont, titleBrush, (imgWidth - titleSize.Width) / 2, padding);
+            var titleText = "趋势品种池";
+            var timeText = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            g.DrawString(titleText, titleFont, titleBrush, padding, padding);
+            g.DrawString(timeText, titleFont, titleBrush, padding, padding + titleFont.Height + 5);
 
             // 绘制表头
             int y = padding + headerHeight;
@@ -2055,7 +2109,7 @@ public partial class GDStopLossMonitorWindow : Window
         {
             if (_selectedTerminalIds.Count == 0) return false;
 
-            var terminals = _databaseService.GetAllTerminalConfigs();
+            var terminals = GetCachedTerminalConfigs();
             var successCount = 0;
             var failCount = 0;
             var failReason = "";
@@ -2196,7 +2250,7 @@ public partial class GDStopLossMonitorWindow : Window
         {
             if (_selectedTerminalIds.Count == 0) return false;
 
-            var terminals = _databaseService.GetAllTerminalConfigs();
+            var terminals = GetCachedTerminalConfigs();
             var successCount = 0;
             var failReason = "";
 
@@ -2253,6 +2307,8 @@ public partial class GDStopLossMonitorWindow : Window
     {
         _uiTimer?.Stop();
         _uiTimer = null;
+        _heartbeatTimer?.Stop();
+        _heartbeatTimer = null;
         _isMonitoring = false;
         base.OnClosed(e);
     }
