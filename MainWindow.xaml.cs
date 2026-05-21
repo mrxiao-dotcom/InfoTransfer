@@ -24,13 +24,22 @@ public partial class MainWindow : Window
     private DateTime _lastActivityCheck = DateTime.MinValue;
     private readonly int _maxLogLines = 1000;
 
+    private static readonly string AppDataFolder = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "InfoTransfer");
+
     public MainWindow()
     {
         InitializeComponent();
 
-        var appDir = AppDomain.CurrentDomain.BaseDirectory;
-        var dbPath = Path.Combine(appDir, "data.db");
-        var configPath = Path.Combine(appDir, "appsettings.json");
+        // 确保 APPDATA 目录存在
+        if (!Directory.Exists(AppDataFolder))
+        {
+            Directory.CreateDirectory(AppDataFolder);
+        }
+
+        var dbPath = Path.Combine(AppDataFolder, "data.db");
+        var configPath = Path.Combine(AppDataFolder, "appsettings.json");
 
         _databaseService = new DatabaseService(dbPath);
         _configService = new ConfigService(configPath, _databaseService);

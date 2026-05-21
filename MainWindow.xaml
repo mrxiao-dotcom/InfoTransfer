@@ -4,6 +4,7 @@
         Title="飞书消息转发服务" 
         Height="700" Width="1000"
         WindowStartupLocation="CenterScreen"
+        WindowState="Maximized"
         Background="#F5F5F5">
     <Window.Resources>
         <!-- 样式定义 -->
@@ -116,7 +117,7 @@
 
     <Grid Margin="8">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="2*"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -124,97 +125,135 @@
         <!-- 顶部控制区 -->
         <Border Grid.Row="0" Style="{StaticResource CardStyle}">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
 
-                <!-- 服务控制 -->
-                <StackPanel Grid.Column="0" Margin="0,0,16,0">
-                    <TextBlock Text="服务控制" Style="{StaticResource HeaderText}"/>
-                    <StackPanel Orientation="Horizontal">
-                        <Button x:Name="BtnStartServer" Content="启动服务" 
-                                Style="{StaticResource SecondaryButton}" 
-                                Click="BtnStartServer_Click" Margin="0,0,8,0"/>
-                        <Button x:Name="BtnStopServer" Content="停止服务" 
-                                Style="{StaticResource DangerButton}" 
-                                Click="BtnStopServer_Click" IsEnabled="False"/>
-                    </StackPanel>
-                </StackPanel>
+                <!-- 第一行：服务状态和统计 -->
+                <Grid Grid.Row="0" Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-                <!-- 服务状态 -->
-                <StackPanel Grid.Column="1" Margin="0,0,16,0">
-                    <TextBlock Text="运行状态" Style="{StaticResource HeaderText}"/>
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Ellipse x:Name="StatusIndicator" Width="12" Height="12" 
-                                 Fill="#D9D9D9" Margin="0,0,8,0"/>
-                        <TextBlock x:Name="TxtStatus" Text="已停止" FontSize="14" VerticalAlignment="Center"/>
+                    <!-- 服务控制 -->
+                    <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                        <TextBlock Text="服务控制" Style="{StaticResource HeaderText}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="BtnStartServer" Content="启动服务" 
+                                    Style="{StaticResource SecondaryButton}" 
+                                    Click="BtnStartServer_Click" Margin="0,0,8,0"/>
+                            <Button x:Name="BtnStopServer" Content="停止服务" 
+                                    Style="{StaticResource DangerButton}" 
+                                    Click="BtnStopServer_Click" IsEnabled="False"/>
+                        </StackPanel>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                        <TextBlock Text="API服务器: " Foreground="#666"/>
-                        <TextBlock x:Name="TxtApiStatus" Text="未运行" Foreground="#999"/>
-                        <TextBlock Text=" | 后台扫描: " Foreground="#666" Margin="12,0,0,0"/>
-                        <TextBlock x:Name="TxtPushStatus" Text="未运行" Foreground="#999"/>
-                    </StackPanel>
-                </StackPanel>
 
-                <!-- 统计信息 -->
-                <StackPanel Grid.Column="2" Margin="0,0,16,0">
-                    <TextBlock Text="消息统计" Style="{StaticResource HeaderText}"/>
-                    <StackPanel Orientation="Horizontal">
-                        <Border Background="#FFF7E6" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="待处理: " Foreground="#FA8C16"/>
-                                <TextBlock x:Name="TxtPendingCount" Text="0" Foreground="#FA8C16" FontWeight="Bold"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Background="#F6FFED" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="已发送: " Foreground="#52C41A"/>
-                                <TextBlock x:Name="TxtSentCount" Text="0" Foreground="#52C41A" FontWeight="Bold"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Background="#FFF1F0" CornerRadius="4" Padding="8,4">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="失败: " Foreground="#FF4D4F"/>
-                                <TextBlock x:Name="TxtFailedCount" Text="0" Foreground="#FF4D4F" FontWeight="Bold"/>
-                            </StackPanel>
-                        </Border>
+                    <!-- 服务状态 -->
+                    <StackPanel Grid.Column="1" Margin="0,0,16,0">
+                        <TextBlock Text="运行状态" Style="{StaticResource HeaderText}"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse x:Name="StatusIndicator" Width="12" Height="12" 
+                                     Fill="#D9D9D9" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="TxtStatus" Text="已停止" FontSize="14" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock Text="API服务器: " Foreground="#666"/>
+                            <TextBlock x:Name="TxtApiStatus" Text="未运行" Foreground="#999"/>
+                            <TextBlock Text=" | 后台扫描: " Foreground="#666" Margin="12,0,0,0"/>
+                            <TextBlock x:Name="TxtPushStatus" Text="未运行" Foreground="#999"/>
+                        </StackPanel>
                     </StackPanel>
-                </StackPanel>
 
-                <!-- 功能按钮 -->
-                <StackPanel Grid.Column="3" Orientation="Horizontal">
-                    <Button x:Name="BtnServerConfig" Content="服务器配置"
-                            Style="{StaticResource PrimaryButton}"
-                            Click="BtnServerConfig_Click" Margin="0,0,8,0"/>
-                    <Button x:Name="BtnFeishuConfig" Content="飞书推送配置"
-                            Style="{StaticResource SecondaryButton}"
-                            Click="BtnFeishuConfig_Click" Margin="0,0,8,0"/>
-                    <Button x:Name="BtnMessageSource" Content="消息源设置"
-                            Style="{StaticResource SecondaryButton}"
-                            Click="BtnMessageSource_Click" Margin="0,0,8,0"/>
-                    <Button x:Name="BtnPushConfig" Content="推送设置"
-                            Style="{StaticResource SecondaryButton}"
-                            Click="BtnPushConfig_Click" Margin="0,0,8,0"/>
-                    <Button x:Name="BtnScheduledTask" Content="定时推送"
-                            Style="{StaticResource SecondaryButton}"
-                            Click="BtnScheduledTask_Click" Margin="0,0,8,0"/>
-                    <Button x:Name="BtnGDSignalConfig" Content="配置GD监控"
-                            Style="{StaticResource SecondaryButton}"
-                            Background="#722ED1"
-                            Click="BtnGDSignalConfig_Click" Margin="0,0,8,0"/>
-                    <Button x:Name="BtnGDSignalMonitor" Content="启动GD监控"
-                            Style="{StaticResource SecondaryButton}"
-                            Background="#FA8C16"
-                            Click="BtnGDSignalMonitor_Click" Margin="0,0,8,0"/>
-                    <Button x:Name="BtnGDStopLossMonitor" Content="盘中止损监测"
-                            Style="{StaticResource SecondaryButton}"
-                            Background="#F5222D"
-                            Click="BtnGDStopLossMonitor_Click"/>
-                </StackPanel>
+                    <!-- 统计信息 -->
+                    <StackPanel Grid.Column="2" Margin="0,0,16,0">
+                        <TextBlock Text="消息统计" Style="{StaticResource HeaderText}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Border Background="#FFF7E6" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="待处理: " Foreground="#FA8C16"/>
+                                    <TextBlock x:Name="TxtPendingCount" Text="0" Foreground="#FA8C16" FontWeight="Bold"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#F6FFED" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="已发送: " Foreground="#52C41A"/>
+                                    <TextBlock x:Name="TxtSentCount" Text="0" Foreground="#52C41A" FontWeight="Bold"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#FFF1F0" CornerRadius="4" Padding="8,4">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="失败: " Foreground="#FF4D4F"/>
+                                    <TextBlock x:Name="TxtFailedCount" Text="0" Foreground="#FF4D4F" FontWeight="Bold"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+
+                <!-- 第二行：功能按钮分区 -->
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- GD期货监控区 -->
+                    <Border Grid.Column="0" Background="#FFF7E6" CornerRadius="8" Padding="16,12" Margin="0,0,16,0" VerticalAlignment="Center">
+                        <StackPanel>
+                            <TextBlock Text="GD期货监控" FontWeight="Bold" FontSize="14" Foreground="#FA8C16" Margin="0,0,0,8"/>
+                            <Button x:Name="BtnGDStopLossMonitor" Content="盘中止损监控"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Background="#F5222D"
+                                    Click="BtnGDStopLossMonitor_Click"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- GD股票监控区 -->
+                    <Border Grid.Column="1" Background="#F6FFED" CornerRadius="8" Padding="16,12" Margin="0,0,16,0" VerticalAlignment="Center">
+                        <StackPanel>
+                            <TextBlock Text="GD股票监控" FontWeight="Bold" FontSize="14" Foreground="#52C41A" Margin="0,0,0,8"/>
+                            <Button x:Name="BtnStockMonitor" Content="盘中股票监控"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Background="#52C41A"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 系统设置区 -->
+                    <Border Grid.Column="2" Background="#F0F5FF" CornerRadius="8" Padding="16,12" VerticalAlignment="Center">
+                        <StackPanel>
+                            <TextBlock Text="系统设置" FontWeight="Bold" FontSize="14" Foreground="#1890FF" Margin="0,0,0,8"/>
+                            <WrapPanel>
+                                <Button x:Name="BtnServerConfig" Content="服务器配置"
+                                        Style="{StaticResource PrimaryButton}"
+                                        Click="BtnServerConfig_Click" Margin="0,0,8,8"/>
+                                <Button x:Name="BtnFeishuConfig" Content="飞书推送配置"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Click="BtnFeishuConfig_Click" Margin="0,0,8,8"/>
+                                <Button x:Name="BtnMessageSource" Content="消息源设置"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Click="BtnMessageSource_Click" Margin="0,0,8,8"/>
+                                <Button x:Name="BtnPushConfig" Content="推送设置"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Click="BtnPushConfig_Click" Margin="0,0,8,8"/>
+                                <Button x:Name="BtnScheduledTask" Content="定时推送"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Click="BtnScheduledTask_Click" Margin="0,0,8,8"/>
+                                <Button x:Name="BtnGDSignalConfig" Content="配置GD监控"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Background="#722ED1"
+                                        Click="BtnGDSignalConfig_Click" Margin="0,0,8,8"/>
+                                <Button x:Name="BtnGDSignalMonitor" Content="启动GD监控"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Background="#FA8C16"
+                                        Click="BtnGDSignalMonitor_Click"/>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </Grid>
         </Border>
 
