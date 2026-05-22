@@ -522,24 +522,32 @@ public partial class GDStopLossMonitorWindow : Window
 
             if (isFirstPush)
             {
+                // 首次推送
                 if (previousFiltered != null)
                 {
-                    // 与历史数据比对
+                    // 有历史数据，与历史数据比对
                     changeDescription = BuildChangeDescriptionFromFiltered(currentFiltered, previousFiltered, out changedProducts);
                     hasChanged = !string.IsNullOrEmpty(changeDescription) && changeDescription != "无变化";
-                }
-
-                if (!hasChanged)
-                {
-                    Dispatcher.Invoke(() =>
+                    
+                    if (!hasChanged)
                     {
-                        TxtLastResult.Text = $"上次结果: {DateTime.Now:HH:mm:ss} - 与历史相同";
-                    });
-                    // 保存过滤后的数据
-                    SaveHistoryData(currentFiltered);
-                    return;
+                        Dispatcher.Invoke(() =>
+                        {
+                            TxtLastResult.Text = $"上次结果: {DateTime.Now:HH:mm:ss} - 与历史相同";
+                        });
+                        // 保存过滤后的数据
+                        SaveHistoryData(currentFiltered);
+                        return;
+                    }
                 }
-
+                else
+                {
+                    // 没有历史数据，视为有变化，需要推送
+                    Log("INFO", "无历史数据，视为首次推送");
+                    hasChanged = true;
+                    changeDescription = "品种池更新";
+                }
+                
                 Log("INFO", "数据有变化，开始发送");
             }
             else

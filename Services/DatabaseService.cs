@@ -142,6 +142,39 @@ public class DatabaseService
                 UpdatedAt TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS GDStockSignalConfigs (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Name TEXT NOT NULL DEFAULT 'GD股票监控',
+                ApiBaseUrl TEXT,
+                ApiToken TEXT,
+                MonitorStartTime TEXT DEFAULT '09:30',
+                MonitorEndTime TEXT DEFAULT '15:00',
+                MonitorNightSession INTEGER DEFAULT 0,
+                NightSessionStartTime TEXT DEFAULT '21:00',
+                NightSessionEndTime TEXT DEFAULT '02:30',
+                MonitorIntervalMinutes INTEGER DEFAULT 30,
+                UseFixedTimePoints INTEGER DEFAULT 1,
+                FixedTimeMinutes TEXT DEFAULT '0,15,30,45',
+                TerminalId TEXT,
+                EnableText INTEGER DEFAULT 1,
+                EnableImage INTEGER DEFAULT 0,
+                TextMessageTemplate TEXT,
+                IsEnabled INTEGER DEFAULT 0,
+                Conditions TEXT DEFAULT '[]',
+                EnableGD15 INTEGER DEFAULT 1,
+                EnableGD20 INTEGER DEFAULT 1,
+                EnableGD25 INTEGER DEFAULT 1,
+                EnableGD30 INTEGER DEFAULT 1,
+                EnableGD35 INTEGER DEFAULT 1,
+                EnableGD40 INTEGER DEFAULT 1,
+                EnableRealTimeStopPriceDiffRateCondition INTEGER DEFAULT 1,
+                EnableRemainingRiskCondition INTEGER DEFAULT 1,
+                RealTimeStopPriceDiffRateValue REAL DEFAULT 0,
+                RemainingRiskValue REAL DEFAULT 0,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT NOT NULL
+            );
+
             PRAGMA journal_mode=WAL;
         ";
         command.ExecuteNonQuery();
@@ -1693,6 +1726,187 @@ public class DatabaseService
 
         var command = connection.CreateCommand();
         command.CommandText = "DELETE FROM GDSignalConfigs WHERE Id = $id";
+        command.Parameters.AddWithValue("$id", id);
+        command.ExecuteNonQuery();
+    }
+
+    // ==================== GD股票监控配置相关方法 ====================
+
+    public List<GDStockSignalConfig> GetAllGDStockSignalConfigs()
+    {
+        var configs = new List<GDStockSignalConfig>();
+
+        using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+
+        var command = connection.CreateCommand();
+        command.CommandText = @"
+            SELECT Id, Name, ApiBaseUrl, ApiToken,
+                   EnableGD15, EnableGD20, EnableGD25, EnableGD30, EnableGD35, EnableGD40,
+                   EnableRealTimeStopPriceDiffRateCondition, EnableRemainingRiskCondition,
+                   RealTimeStopPriceDiffRateValue, RemainingRiskValue,
+                   MonitorStartTime, MonitorEndTime, MonitorNightSession,
+                   NightSessionStartTime, NightSessionEndTime,
+                   MonitorIntervalMinutes, UseFixedTimePoints, FixedTimeMinutes,
+                   TerminalId, EnableText, EnableImage, TextMessageTemplate,
+                   IsEnabled, Conditions, CreatedAt, UpdatedAt
+            FROM GDStockSignalConfigs
+            ORDER BY CreatedAt ASC
+        ";
+
+        try
+        {
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                configs.Add(new GDStockSignalConfig
+                {
+                    Id = reader.GetInt32(0),
+                    Name = reader.IsDBNull(1) ? "" : reader.GetString(1),
+                    ApiBaseUrl = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                    ApiToken = reader.IsDBNull(3) ? "" : reader.GetString(3),
+                    EnableGD15 = reader.IsDBNull(4) ? false : reader.GetInt32(4) == 1,
+                    EnableGD20 = reader.IsDBNull(5) ? false : reader.GetInt32(5) == 1,
+                    EnableGD25 = reader.IsDBNull(6) ? false : reader.GetInt32(6) == 1,
+                    EnableGD30 = reader.IsDBNull(7) ? false : reader.GetInt32(7) == 1,
+                    EnableGD35 = reader.IsDBNull(8) ? false : reader.GetInt32(8) == 1,
+                    EnableGD40 = reader.IsDBNull(9) ? false : reader.GetInt32(9) == 1,
+                    EnableRealTimeStopPriceDiffRateCondition = reader.IsDBNull(10) ? true : reader.GetInt32(10) == 1,
+                    EnableRemainingRiskCondition = reader.IsDBNull(11) ? false : reader.GetInt32(11) == 1,
+                    RealTimeStopPriceDiffRateValue = reader.IsDBNull(12) ? 0 : reader.GetDouble(12),
+                    RemainingRiskValue = reader.IsDBNull(13) ? 0 : reader.GetDouble(13),
+                    MonitorStartTime = reader.IsDBNull(14) ? "09:30" : reader.GetString(14),
+                    MonitorEndTime = reader.IsDBNull(15) ? "15:00" : reader.GetString(15),
+                    MonitorNightSession = reader.IsDBNull(16) ? false : reader.GetInt32(16) == 1,
+                    NightSessionStartTime = reader.IsDBNull(17) ? "21:00" : reader.GetString(17),
+                    NightSessionEndTime = reader.IsDBNull(18) ? "02:30" : reader.GetString(18),
+                    MonitorIntervalMinutes = reader.IsDBNull(19) ? 30 : reader.GetInt32(19),
+                    UseFixedTimePoints = reader.IsDBNull(20) ? true : reader.GetInt32(20) == 1,
+                    FixedTimeMinutes = reader.IsDBNull(21) ? "0,15,30,45" : reader.GetString(21),
+                    TerminalId = reader.IsDBNull(22) ? "" : reader.GetString(22),
+                    EnableText = reader.IsDBNull(23) ? true : reader.GetInt32(23) == 1,
+                    EnableImage = reader.IsDBNull(24) ? false : reader.GetInt32(24) == 1,
+                    TextMessageTemplate = reader.IsDBNull(25) ? "" : reader.GetString(25),
+                    IsEnabled = reader.IsDBNull(26) ? false : reader.GetInt32(26) == 1,
+                    Conditions = reader.IsDBNull(27) ? "[]" : reader.GetString(27),
+                    CreatedAt = DateTime.Parse(reader.GetString(28)),
+                    UpdatedAt = DateTime.Parse(reader.GetString(29))
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"获取GD股票信号配置错误: {ex.Message}");
+        }
+
+        return configs;
+    }
+
+    public void SaveGDStockSignalConfig(GDStockSignalConfig config)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+
+        var now = DateTime.Now.ToString("o");
+
+        if (config.Id > 0)
+        {
+            var command = connection.CreateCommand();
+            command.CommandText = @"
+                UPDATE GDStockSignalConfigs
+                SET Name = $name, ApiBaseUrl = $apiBaseUrl, ApiToken = $apiToken,
+                    EnableGD15 = $enableGD15, EnableGD20 = $enableGD20, EnableGD25 = $enableGD25,
+                    EnableGD30 = $enableGD30, EnableGD35 = $enableGD35, EnableGD40 = $enableGD40,
+                    EnableRealTimeStopPriceDiffRateCondition = $enableRealTimeStop,
+                    EnableRemainingRiskCondition = $enableRemainingRisk,
+                    RealTimeStopPriceDiffRateValue = $realTimeStopValue,
+                    RemainingRiskValue = $remainingRiskValue,
+                    MonitorStartTime = $monitorStartTime, MonitorEndTime = $monitorEndTime,
+                    MonitorNightSession = $monitorNightSession,
+                    NightSessionStartTime = $nightSessionStartTime,
+                    NightSessionEndTime = $nightSessionEndTime,
+                    MonitorIntervalMinutes = $monitorIntervalMinutes,
+                    UseFixedTimePoints = $useFixedTimePoints,
+                    FixedTimeMinutes = $fixedTimeMinutes,
+                    TerminalId = $terminalId,
+                    EnableText = $enableText, EnableImage = $enableImage,
+                    TextMessageTemplate = $textMessageTemplate,
+                    IsEnabled = $isEnabled, Conditions = $conditions,
+                    UpdatedAt = $updatedAt
+                WHERE Id = $id
+            ";
+            AddGDStockConfigParameters(command, config, now);
+            command.Parameters.AddWithValue("$id", config.Id);
+            command.ExecuteNonQuery();
+        }
+        else
+        {
+            var command = connection.CreateCommand();
+            command.CommandText = @"
+                INSERT INTO GDStockSignalConfigs (Name, ApiBaseUrl, ApiToken,
+                    EnableGD15, EnableGD20, EnableGD25, EnableGD30, EnableGD35, EnableGD40,
+                    EnableRealTimeStopPriceDiffRateCondition, EnableRemainingRiskCondition,
+                    RealTimeStopPriceDiffRateValue, RemainingRiskValue,
+                    MonitorStartTime, MonitorEndTime, MonitorNightSession,
+                    NightSessionStartTime, NightSessionEndTime,
+                    MonitorIntervalMinutes, UseFixedTimePoints, FixedTimeMinutes,
+                    TerminalId, EnableText, EnableImage, TextMessageTemplate,
+                    IsEnabled, Conditions, CreatedAt, UpdatedAt)
+                VALUES ($name, $apiBaseUrl, $apiToken,
+                    $enableGD15, $enableGD20, $enableGD25, $enableGD30, $enableGD35, $enableGD40,
+                    $enableRealTimeStop, $enableRemainingRisk,
+                    $realTimeStopValue, $remainingRiskValue,
+                    $monitorStartTime, $monitorEndTime, $monitorNightSession,
+                    $nightSessionStartTime, $nightSessionEndTime,
+                    $monitorIntervalMinutes, $useFixedTimePoints, $fixedTimeMinutes,
+                    $terminalId, $enableText, $enableImage, $textMessageTemplate,
+                    $isEnabled, $conditions, $createdAt, $updatedAt)
+            ";
+            AddGDStockConfigParameters(command, config, now);
+            command.ExecuteNonQuery();
+        }
+    }
+
+    private void AddGDStockConfigParameters(SqliteCommand command, GDStockSignalConfig config, string now)
+    {
+        command.Parameters.AddWithValue("$name", config.Name ?? "");
+        command.Parameters.AddWithValue("$apiBaseUrl", config.ApiBaseUrl ?? "");
+        command.Parameters.AddWithValue("$apiToken", config.ApiToken ?? "");
+        command.Parameters.AddWithValue("$enableGD15", config.EnableGD15 ? 1 : 0);
+        command.Parameters.AddWithValue("$enableGD20", config.EnableGD20 ? 1 : 0);
+        command.Parameters.AddWithValue("$enableGD25", config.EnableGD25 ? 1 : 0);
+        command.Parameters.AddWithValue("$enableGD30", config.EnableGD30 ? 1 : 0);
+        command.Parameters.AddWithValue("$enableGD35", config.EnableGD35 ? 1 : 0);
+        command.Parameters.AddWithValue("$enableGD40", config.EnableGD40 ? 1 : 0);
+        command.Parameters.AddWithValue("$enableRealTimeStop", config.EnableRealTimeStopPriceDiffRateCondition ? 1 : 0);
+        command.Parameters.AddWithValue("$enableRemainingRisk", config.EnableRemainingRiskCondition ? 1 : 0);
+        command.Parameters.AddWithValue("$realTimeStopValue", config.RealTimeStopPriceDiffRateValue);
+        command.Parameters.AddWithValue("$remainingRiskValue", config.RemainingRiskValue);
+        command.Parameters.AddWithValue("$monitorStartTime", config.MonitorStartTime ?? "09:30");
+        command.Parameters.AddWithValue("$monitorEndTime", config.MonitorEndTime ?? "15:00");
+        command.Parameters.AddWithValue("$monitorNightSession", config.MonitorNightSession ? 1 : 0);
+        command.Parameters.AddWithValue("$nightSessionStartTime", config.NightSessionStartTime ?? "21:00");
+        command.Parameters.AddWithValue("$nightSessionEndTime", config.NightSessionEndTime ?? "02:30");
+        command.Parameters.AddWithValue("$monitorIntervalMinutes", config.MonitorIntervalMinutes);
+        command.Parameters.AddWithValue("$useFixedTimePoints", config.UseFixedTimePoints ? 1 : 0);
+        command.Parameters.AddWithValue("$fixedTimeMinutes", config.FixedTimeMinutes ?? "0,15,30,45");
+        command.Parameters.AddWithValue("$terminalId", config.TerminalId ?? "");
+        command.Parameters.AddWithValue("$enableText", config.EnableText ? 1 : 0);
+        command.Parameters.AddWithValue("$enableImage", config.EnableImage ? 1 : 0);
+        command.Parameters.AddWithValue("$textMessageTemplate", config.TextMessageTemplate ?? "");
+        command.Parameters.AddWithValue("$isEnabled", config.IsEnabled ? 1 : 0);
+        command.Parameters.AddWithValue("$conditions", config.Conditions ?? "[]");
+        command.Parameters.AddWithValue("$createdAt", now);
+        command.Parameters.AddWithValue("$updatedAt", now);
+    }
+
+    public void DeleteGDStockSignalConfig(int id)
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+
+        var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM GDStockSignalConfigs WHERE Id = $id";
         command.Parameters.AddWithValue("$id", id);
         command.ExecuteNonQuery();
     }

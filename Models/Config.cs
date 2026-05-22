@@ -337,3 +337,106 @@ public class GDSignalTrigger
     public DateTime TriggeredAt { get; set; } = DateTime.Now;
     public bool Pushed { get; set; } = false;
 }
+
+/// <summary>
+/// GD股票策略监控配置
+/// </summary>
+public class GDStockSignalConfig
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "GD股票监控";
+    /// <summary>
+    /// API完整地址（股票不需要添加参数）
+    /// </summary>
+    public string ApiBaseUrl { get; set; } = "";
+    /// <summary>
+    /// API Token认证
+    /// </summary>
+    public string ApiToken { get; set; } = "";
+    /// <summary>
+    /// 主要监控策略勾选状态（股票只有 GD15-GD30）
+    /// </summary>
+    public bool EnableGD15 { get; set; } = true;
+    public bool EnableGD20 { get; set; } = true;
+    public bool EnableGD25 { get; set; } = true;
+    public bool EnableGD30 { get; set; } = true;
+    /// <summary>
+    /// 兼容旧配置，保留字段但不使用
+    /// </summary>
+    public bool EnableGD35 { get; set; } = false;
+    public bool EnableGD40 { get; set; } = false;
+    /// <summary>
+    /// 是否启用 realTimeStopPriceDiffRate > 0 条件
+    /// </summary>
+    public bool EnableRealTimeStopPriceDiffRateCondition { get; set; } = true;
+    /// <summary>
+    /// realTimeStopPriceDiffRate 阈值
+    /// </summary>
+    public double RealTimeStopPriceDiffRateValue { get; set; } = 0;
+    /// <summary>
+    /// 是否启用 remainingRisk <= 条件
+    /// </summary>
+    public bool EnableRemainingRiskCondition { get; set; } = true;
+    /// <summary>
+    /// remainingRisk 阈值
+    /// </summary>
+    public double RemainingRiskValue { get; set; } = 0;
+    /// <summary>
+    /// 监控时间段-开始时间，格式 HH:mm
+    /// </summary>
+    public string MonitorStartTime { get; set; } = "09:30";
+    /// <summary>
+    /// 监控时间段-结束时间，格式 HH:mm
+    /// </summary>
+    public string MonitorEndTime { get; set; } = "15:00";
+    /// <summary>
+    /// 是否监控夜盘（股票通常不监控夜盘）
+    /// </summary>
+    public bool MonitorNightSession { get; set; } = false;
+    /// <summary>
+    /// 夜盘开始时间
+    /// </summary>
+    public string NightSessionStartTime { get; set; } = "21:00";
+    /// <summary>
+    /// 夜盘结束时间
+    /// </summary>
+    public string NightSessionEndTime { get; set; } = "02:30";
+    /// <summary>
+    /// 监控频率：每隔N分钟
+    /// </summary>
+    public int MonitorIntervalMinutes { get; set; } = 30;
+    /// <summary>
+    /// 是否使用固定时间点提醒
+    /// </summary>
+    public bool UseFixedTimePoints { get; set; } = true;
+    /// <summary>
+    /// 固定时间点分钟值
+    /// </summary>
+    public string FixedTimeMinutes { get; set; } = "0,15,30,45";
+    /// <summary>
+    /// 推送目标终端ID
+    /// </summary>
+    public string TerminalId { get; set; } = "";
+    /// <summary>
+    /// 是否启用文本消息推送
+    /// </summary>
+    public bool EnableText { get; set; } = true;
+    /// <summary>
+    /// 是否启用图片消息推送
+    /// </summary>
+    public bool EnableImage { get; set; } = false;
+    /// <summary>
+    /// 文本消息模板
+    /// </summary>
+    public string TextMessageTemplate { get; set; } = "";
+    /// <summary>
+    /// 是否启用（监控任务是否运行）
+    /// </summary>
+    public bool IsEnabled { get; set; } = false;
+    /// <summary>
+    /// 触发条件列表（JSON格式存储）
+    /// </summary>
+    public string Conditions { get; set; } = "[]";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime UpdatedAt { get; set; } = DateTime.Now;
+}

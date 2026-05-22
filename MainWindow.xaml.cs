@@ -300,6 +300,13 @@ public partial class MainWindow : Window
         stopLossWindow.Show();
     }
 
+    private void BtnStockMonitor_Click(object sender, RoutedEventArgs e)
+    {
+        var stockWindow = new GDStockSignalConfigWindow(_databaseService, _configService, AddLog);
+        stockWindow.Owner = this;
+        stockWindow.Show();
+    }
+
     private void BtnClearLog_Click(object sender, RoutedEventArgs e)
     {
         LogTextBox.Text = "";

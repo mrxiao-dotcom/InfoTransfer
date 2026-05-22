@@ -574,6 +574,12 @@ public class MessageSourceService
                 return _imageGenerator.GenerateFluencyRankingImage(rawData, sourceName);
             }
 
+            // 检查是否是股票 GD 信号格式 (data array with productId and items)
+            if (rawData.Trim().StartsWith("{") && rawData.Contains("\"data\"") && rawData.Contains("\"productId\"") && rawData.Contains("\"items\""))
+            {
+                return _imageGenerator.GenerateStockGDSignalImage(rawData, sourceName);
+            }
+
             // 其他格式暂不支持图片生成
             Log($"[图片生成] 数据格式不支持图片生成，将使用文字模式");
             return null;

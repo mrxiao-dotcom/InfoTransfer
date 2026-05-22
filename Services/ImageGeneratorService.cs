@@ -5,6 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.IO;
+using System.Linq;
 using System.Text;
 using Newtonsoft.Json.Linq;
 
@@ -466,6 +467,353 @@ public class ImageGeneratorService
             2 => Color.FromArgb(205, 127, 50),  // 铜色
             _ => Color.FromArgb(180, 180, 180)  // 普通
         };
+    }
+
+    /// <summary>
+    /// 生成股票 GD 信号图片
+    /// </summary>
+    public byte[]? GenerateStockGDSignalImage(string rawData, string sourceName)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(rawData))
+            {
+                System.Diagnostics.Debug.WriteLine("[ImageGenerator] rawData 为空");
+                return null;
+            }
+
+            var data = JObject.Parse(rawData);
+            var dataArray = data["data"] as JArray;
+
+            if (dataArray == null || dataArray.Count == 0)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ImageGenerator] dataArray 为空或为 null");
+                return null;
+            }
+
+            // 解析每个品种的 GD15-GD30 数据
+            var products = new List<StockGDProduct>();
+            foreach (var productData in dataArray)
+            {
+                var productId = productData["productId"]?.ToString();
+                if (string.IsNullOrEmpty(productId)) continue;
+
+                var name = productData["name"]?.ToString() ?? productId; // 使用name，默认为productId
+                var items = productData["items"] as JObject;
+                if (items == null) continue;
+
+                // 提取 GD15-GD30 的 direction 和 remainingRisk
+                var gdStrategies = new[] { "GD15", "GD20", "GD25", "GD30" };
+                var stratDict = new Dictionary<string, (int direction, double risk)>();
+
+                foreach (var strategy in gdStrategies)
+                {
+                    var strategyObj = items[strategy] as JObject;
+                    if (strategyObj != null)
+                    {
+                        var direction = (int?)strategyObj["direction"] ?? -1;
+                        var risk = (double?)strategyObj["remainingRisk"] ?? 0;
+                        stratDict[strategy] = (direction, risk);
+                    }
+                }
+
+                if (stratDict.Count > 0)
+                {
+                    products.Add(new StockGDProduct
+                    {
+                        ProductId = productId,
+                        Name = name,
+                        Strategies = stratDict
+                    });
+                }
+            }
+
+            if (products.Count == 0)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ImageGenerator] products 为空 (dataArray.Count={dataArray.Count})");
+                return null;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[ImageGenerator] 解析到 {products.Count} 个品种");
+            foreach (var p in products)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ImageGenerator] 品种: {p.ProductId}, 策略数: {p.Strategies.Count}");
+            }
+
+            // 策略列表
+            var strategies = new[] { "GD15", "GD20", "GD25", "GD30" };
+
+            // 分离共振品种（2个及以上策略同时有的）和非共振品种
+            var productStrategies = new Dictionary<string, List<string>>();
+            foreach (var product in products)
+            {
+                var containingStrategies = strategies.Where(s => 
+                    product.Strategies.TryGetValue(s, out var stratItem) && stratItem.direction == 1).ToList();
+                if (containingStrategies.Count > 0)
+                {
+                    productStrategies[product.ProductId] = containingStrategies;
+                }
+            }
+
+            // 共振品种：被2个及以上策略同时包含
+            var resonanceProducts = productStrategies
+                .Where(kv => kv.Value.Count >= 2)
+                .OrderByDescending(kv => kv.Value.Count)
+                .ThenBy(kv => kv.Key)
+                .Select(kv => kv.Key)
+                .ToList();
+
+            System.Diagnostics.Debug.WriteLine($"[ImageGenerator] 共振品种数: {resonanceProducts.Count}");
+
+            // 单策略品种
+            var strategyProducts = new Dictionary<string, List<StockGDProduct>>();
+            foreach (var strategy in strategies)
+            {
+                strategyProducts[strategy] = new List<StockGDProduct>();
+            }
+
+            foreach (var product in products)
+            {
+                var containingStrategies = productStrategies.GetValueOrDefault(product.ProductId);
+                if (containingStrategies != null)
+                {
+                    foreach (var strategy in containingStrategies)
+                    {
+                        strategyProducts[strategy].Add(product);
+                    }
+                }
+            }
+
+            // ========== 构建每行显示数据 ==========
+            // row -> strategy -> (displayName, risk) or null
+            var rowDisplayData = new List<Dictionary<string, (string displayName, double risk)?>>();
+
+            // 共振品种行
+            for (int i = 0; i < resonanceProducts.Count; i++)
+            {
+                var productId = resonanceProducts[i];
+                var rowDict = new Dictionary<string, (string displayName, double risk)?>();
+                
+                foreach (var strategy in strategies)
+                {
+                    var product = strategyProducts[strategy].FirstOrDefault(p => p.ProductId == productId);
+                    if (product != null && !string.IsNullOrEmpty(product.ProductId))
+                    {
+                        var risk = product.Strategies.TryGetValue(strategy, out var stratData) ? stratData.risk : 0;
+                        rowDict[strategy] = (product.Name, risk);
+                    }
+                    else
+                    {
+                        rowDict[strategy] = null; // 该策略没有这个品种，留空
+                    }
+                }
+                rowDisplayData.Add(rowDict);
+            }
+
+            // 单策略品种行：每个品种单独一行
+            foreach (var strategy in strategies)
+            {
+                var list = strategyProducts[strategy];
+                foreach (var product in list)
+                {
+                    // 只添加单策略品种（不在共振品种列表中）
+                    if (!resonanceProducts.Contains(product.ProductId))
+                    {
+                        var rowDict = new Dictionary<string, (string displayName, double risk)?>();
+                        var risk = product.Strategies.TryGetValue(strategy, out var stratData) ? stratData.risk : 0;
+                        rowDict[strategy] = (product.Name, risk);
+                        // 其他策略留空
+                        foreach (var s in strategies.Where(st => st != strategy))
+                        {
+                            rowDict[s] = null;
+                        }
+                        rowDisplayData.Add(rowDict);
+                    }
+                }
+            }
+
+            int totalRows = rowDisplayData.Count;
+            System.Diagnostics.Debug.WriteLine($"[ImageGenerator] 总行数: {totalRows}");
+            
+            if (totalRows == 0)
+            {
+                System.Diagnostics.Debug.WriteLine("[ImageGenerator] 总行数为0，不生成图片");
+                return null;
+            }
+
+            // 图片参数
+            int cellHeight = 42; // 增加高度以容纳两行文字
+            int titleHeight = 55;
+            int rowNumColWidth = 45;
+            int padding = 15;
+            int headerHeight = 40;
+            int strategyColWidth = 110;
+
+            // 先测量字体
+            using var titleFont = new Font("Microsoft YaHei UI", 14, FontStyle.Bold);
+            using var headerFont = new Font("Microsoft YaHei UI", 11, FontStyle.Bold);
+            using var cellFont = new Font("Microsoft YaHei UI", 10);
+            using var riskFont = new Font("Microsoft YaHei UI", 8);
+
+            // 计算列宽
+            var colWidths = new List<int> { rowNumColWidth };
+            for (int i = 0; i < strategies.Length; i++)
+            {
+                colWidths.Add(strategyColWidth);
+            }
+
+            // 图片尺寸
+            int imgHeight = padding * 2 + headerHeight + titleHeight + cellHeight * totalRows + 10;
+            int imgWidth = padding * 2 + colWidths.Sum();
+
+            using var bitmap = new Bitmap(imgWidth, imgHeight);
+            using var graphics = Graphics.FromImage(bitmap);
+
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            graphics.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+
+            // 背景
+            using var bgBrush = new SolidBrush(Color.FromArgb(30, 30, 35));
+            graphics.FillRectangle(bgBrush, 0, 0, imgWidth, imgHeight);
+
+            int currentY = padding;
+
+            // 标题
+            using var whiteBrush = new SolidBrush(Color.White);
+            using var grayBrush = new SolidBrush(Color.FromArgb(180, 180, 180));
+            using var redBrush = new SolidBrush(Color.FromArgb(220, 80, 80));
+            using var riskBrush = new SolidBrush(Color.FromArgb(160, 160, 160));
+            
+            string title = "【股票 GD 信号监控】";
+            SizeF titleSize = graphics.MeasureString(title, titleFont);
+            float titleX = (imgWidth - titleSize.Width) / 2;
+            graphics.DrawString(title, titleFont, whiteBrush, titleX, currentY);
+
+            string timeStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+            SizeF timeSize = graphics.MeasureString(timeStr, new Font("Microsoft YaHei UI", 10));
+            float timeX = (imgWidth - timeSize.Width) / 2;
+            graphics.DrawString(timeStr, new Font("Microsoft YaHei UI", 10), grayBrush, timeX, currentY + 26);
+
+            currentY += titleHeight;
+
+            // 表头
+            using var headerBgBrush = new SolidBrush(Color.FromArgb(66, 66, 90));
+            graphics.FillRectangle(headerBgBrush, padding, currentY, imgWidth - padding * 2, headerHeight);
+
+            int colX = padding + 5;
+            var seqSize = graphics.MeasureString("序号", headerFont);
+            graphics.DrawString("序号", headerFont, whiteBrush, colX + (rowNumColWidth - seqSize.Width) / 2, currentY + (headerHeight - seqSize.Height) / 2);
+            
+            colX = padding + rowNumColWidth;
+            for (int i = 0; i < strategies.Length; i++)
+            {
+                var strategyName = strategies[i];
+                var strategySize = graphics.MeasureString(strategyName, headerFont);
+                float drawX = colX + (colWidths[i + 1] - strategySize.Width) / 2;
+                float drawY = currentY + (headerHeight - strategySize.Height) / 2;
+                graphics.DrawString(strategyName, headerFont, whiteBrush, drawX, drawY);
+                colX += colWidths[i + 1];
+            }
+
+            currentY += headerHeight;
+
+            // 数据行
+            for (int row = 0; row < totalRows; row++)
+            {
+                var rowDict = rowDisplayData[row];
+                
+                // 斑马纹
+                if (row % 2 == 0)
+                {
+                    using var zebraBrush = new SolidBrush(Color.FromArgb(40, 40, 48));
+                    graphics.FillRectangle(zebraBrush, padding, currentY, imgWidth - padding * 2, cellHeight);
+                }
+
+                // 序号
+                colX = padding;
+                var rowNumText = (row + 1).ToString();
+                var rowNumSize = graphics.MeasureString(rowNumText, cellFont);
+                using var rowNumBrush = new SolidBrush(Color.FromArgb(160, 160, 160));
+                graphics.DrawString(rowNumText, cellFont, rowNumBrush, colX + (rowNumColWidth - rowNumSize.Width) / 2, currentY + (cellHeight - rowNumSize.Height) / 2);
+
+                // 各策略列
+                colX = padding + rowNumColWidth;
+                for (int i = 0; i < strategies.Length; i++)
+                {
+                    var strategy = strategies[i];
+                    var cw = colWidths[i + 1];
+                    
+                    var cellData = rowDict.TryGetValue(strategy, out var cellValue) ? cellValue : null;
+                    
+                    if (cellData.HasValue)
+                    {
+                        // 品种名称（上方）
+                        var displayName = cellData.Value.displayName;
+                        var risk = cellData.Value.risk;
+                        
+                        // 计算可用宽度和高度
+                        float availableWidth = cw - 8;
+                        float topHalfHeight = (cellHeight - 6) / 2;
+                        
+                        // 如果文字宽度超出，缩放字体
+                        SizeF nameSize = graphics.MeasureString(displayName, cellFont);
+                        Font usedFont = cellFont;
+                        if (nameSize.Width > availableWidth || nameSize.Height > topHalfHeight)
+                        {
+                            float scaleX = availableWidth / nameSize.Width;
+                            float scaleY = topHalfHeight / nameSize.Height;
+                            float scale = Math.Min(scaleX, scaleY) * 0.9f; // 留点余量
+                            usedFont = new Font("Microsoft YaHei UI", 10 * scale);
+                            nameSize = graphics.MeasureString(displayName, usedFont);
+                        }
+                        
+                        // 居中 X
+                        float drawX = colX + (cw - nameSize.Width) / 2;
+                        // 居中 Y (单元格上半部分)
+                        float drawY = currentY + (topHalfHeight - nameSize.Height) / 2 + 1;
+                        
+                        graphics.DrawString(displayName, usedFont, redBrush, drawX, drawY);
+                        
+                        // 剩余风险百分比（下方）
+                        var riskText = $"{risk * 100:F1}%";
+                        SizeF riskSize = graphics.MeasureString(riskText, riskFont);
+                        float riskDrawX = colX + (cw - riskSize.Width) / 2;
+                        float bottomHalfHeight = (cellHeight - 6) / 2;
+                        float riskDrawY = currentY + topHalfHeight + (bottomHalfHeight - riskSize.Height) / 2 + 1;
+                        graphics.DrawString(riskText, riskFont, riskBrush, riskDrawX, riskDrawY);
+                        
+                        if (usedFont != cellFont)
+                        {
+                            usedFont.Dispose();
+                        }
+                    }
+                    // 如果没有数据，该格留空
+                    
+                    colX += cw;
+                }
+
+                currentY += cellHeight;
+            }
+
+            // 保存为 PNG
+            using var ms = new MemoryStream();
+            bitmap.Save(ms, ImageFormat.Png);
+            System.Diagnostics.Debug.WriteLine($"[ImageGenerator] 图片生成成功，大小: {ms.Length} bytes");
+            return ms.ToArray();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ImageGenerator] 生成图片失败: {ex.Message}\n{ex.StackTrace}");
+            return null;
+        }
+    }
+
+    private class StockGDProduct
+    {
+        public string ProductId { get; set; } = "";
+        public string Name { get; set; } = "";
+        public Dictionary<string, (int direction, double risk)> Strategies { get; set; } = new();
     }
 
     public string SaveImageToTempFile(byte[] imageData, string prefix = "ranking")

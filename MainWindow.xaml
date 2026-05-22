@@ -218,7 +218,8 @@
                             <TextBlock Text="GD股票监控" FontWeight="Bold" FontSize="14" Foreground="#52C41A" Margin="0,0,0,8"/>
                             <Button x:Name="BtnStockMonitor" Content="盘中股票监控"
                                     Style="{StaticResource SecondaryButton}"
-                                    Background="#52C41A"/>
+                                    Background="#52C41A"
+                                    Click="BtnStockMonitor_Click"/>
                         </StackPanel>
                     </Border>
 

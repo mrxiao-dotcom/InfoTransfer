@@ -107,10 +107,6 @@ public partial class GDSignalConfigWindow : Window
         ChkEnableText.Unchecked += (s, e) => ScheduleAutoSave();
         ChkEnableImage.Checked += (s, e) => ScheduleAutoSave();
         ChkEnableImage.Unchecked += (s, e) => ScheduleAutoSave();
-        ChkRealTimeStopPriceDiffRate.Checked += (s, e) => ScheduleAutoSave();
-        ChkRealTimeStopPriceDiffRate.Unchecked += (s, e) => ScheduleAutoSave();
-        ChkRemainingRisk.Checked += (s, e) => ScheduleAutoSave();
-        ChkRemainingRisk.Unchecked += (s, e) => ScheduleAutoSave();
 
         // RadioButton 变化时自动保存
         RbFixedTime.Checked += (s, e) => ScheduleAutoSave();
@@ -230,9 +226,6 @@ public partial class GDSignalConfigWindow : Window
         ChkGD35.IsChecked = _currentConfig.EnableGD35;
         ChkGD40.IsChecked = _currentConfig.EnableGD40;
 
-        // 加载触发条件勾选状态
-        ChkRealTimeStopPriceDiffRate.IsChecked = _currentConfig.EnableRealTimeStopPriceDiffRateCondition;
-        ChkRemainingRisk.IsChecked = _currentConfig.EnableRemainingRiskCondition;
         TxtRealTimeStopValue.Text = _currentConfig.RealTimeStopPriceDiffRateValue.ToString();
         TxtRemainingRiskValue.Text = _currentConfig.RemainingRiskValue.ToString();
 
@@ -278,9 +271,6 @@ public partial class GDSignalConfigWindow : Window
         _currentConfig.EnableGD35 = ChkGD35.IsChecked == true;
         _currentConfig.EnableGD40 = ChkGD40.IsChecked == true;
 
-        // 保存触发条件勾选状态
-        _currentConfig.EnableRealTimeStopPriceDiffRateCondition = ChkRealTimeStopPriceDiffRate.IsChecked == true;
-        _currentConfig.EnableRemainingRiskCondition = ChkRemainingRisk.IsChecked == true;
         _currentConfig.RealTimeStopPriceDiffRateValue = double.TryParse(TxtRealTimeStopValue.Text, out var stopVal) ? stopVal : 0;
         _currentConfig.RemainingRiskValue = double.TryParse(TxtRemainingRiskValue.Text, out var riskVal) ? riskVal : 0;
 
@@ -782,6 +772,7 @@ public partial class GDSignalConfigWindow : Window
 
             // 构建 API URL
             var apiUrl = messageSource.ApiUrl;
+            _safeLogCallback("INFO", $"消息源配置: ID=4, URL={apiUrl}, Token=***");
             
             // 检查 URL 是否已经包含策略参数
             bool urlHasStrategys = apiUrl.Contains("Strategys=");
@@ -812,25 +803,61 @@ public partial class GDSignalConfigWindow : Window
                 client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", messageSource.ApiToken);
             }
 
-            var response = await client.GetAsync(fullUrl);
-            if (response.IsSuccessStatusCode)
+            WriteToLogFile("DEBUG", $"准备发送GET请求到: {fullUrl}");
+            WriteToLogFile("DEBUG", $"使用Bearer Token: {(string.IsNullOrWhiteSpace(messageSource.ApiToken) ? "无" : "有")}");
+            
+            try
             {
-                var content = await response.Content.ReadAsStringAsync();
-                _safeLogCallback("INFO", $"API返回数据长度: {content.Length} 字节");
-                WriteToLogFile("INFO", $"API返回数据长度: {content.Length} 字节");
-                return JToken.Parse(content);
+                var response = await client.GetAsync(fullUrl);
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    _safeLogCallback("INFO", $"API返回数据长度: {content.Length} 字节");
+                    WriteToLogFile("INFO", $"API返回数据长度: {content.Length} 字节");
+                    return JToken.Parse(content);
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _safeLogCallback("ERROR", $"API返回错误: {response.StatusCode}");
+                    WriteToLogFile("ERROR", $"API返回错误: {response.StatusCode} - {errorContent}");
+                }
             }
-            else
+            catch (Exception httpEx)
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                _safeLogCallback("ERROR", $"API返回错误: {response.StatusCode}");
-                WriteToLogFile("ERROR", $"API返回错误: {response.StatusCode} - {errorContent}");
+                WriteToLogFile("ERROR", $"HTTP请求异常: {httpEx.GetType().Name}: {httpEx.Message}");
+                if (httpEx.InnerException != null)
+                {
+                    WriteToLogFile("ERROR", $"InnerException: {httpEx.InnerException.GetType().Name}: {httpEx.InnerException.Message}");
+                    if (httpEx.InnerException.InnerException != null)
+                    {
+                        WriteToLogFile("ERROR", $"InnerInnerException: {httpEx.InnerException.InnerException.GetType().Name}: {httpEx.InnerException.InnerException.Message}");
+                    }
+                }
+                _safeLogCallback("ERROR", $"HTTP请求异常: {httpEx.GetType().Name}: {httpEx.Message}");
+                if (httpEx.InnerException != null)
+                {
+                    _safeLogCallback("ERROR", $"InnerException: {httpEx.InnerException.GetType().Name}: {httpEx.InnerException.Message}");
+                    if (httpEx.InnerException.InnerException != null)
+                    {
+                        _safeLogCallback("ERROR", $"InnerInnerException: {httpEx.InnerException.InnerException.GetType().Name}: {httpEx.InnerException.InnerException.Message}");
+                    }
+                }
+                throw;
             }
         }
         catch (Exception ex)
         {
-            _safeLogCallback("ERROR", $"获取信号数据异常: {ex.Message}");
-            WriteToLogFile("ERROR", $"获取信号数据异常: {ex.Message}");
+            WriteToLogFile("ERROR", $"获取信号数据异常: {ex.GetType().Name}: {ex.Message}");
+            if (ex.InnerException != null)
+            {
+                WriteToLogFile("ERROR", $"InnerException: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
+                if (ex.InnerException.InnerException != null)
+                {
+                    WriteToLogFile("ERROR", $"InnerInnerException: {ex.InnerException.InnerException.GetType().Name}: {ex.InnerException.InnerException.Message}");
+                }
+            }
+            _safeLogCallback("ERROR", $"获取信号数据异常: {ex.GetType().Name}: {ex.Message}");
         }
 
         return null;
@@ -983,18 +1010,17 @@ public partial class GDSignalConfigWindow : Window
             }
         }
 
-        bool checkRealTimeStop = _currentConfig.EnableRealTimeStopPriceDiffRateCondition;
-        bool checkRemainingRisk = _currentConfig.EnableRemainingRiskCondition;
-        // 用户输入的是百分比（如0.5表示0.5%），API返回的是小数（如0.005），需要转换
-        double realTimeStopThreshold = _currentConfig.RealTimeStopPriceDiffRateValue / 100.0;
-        // 用户输入的是百分比（如5表示5%），API返回的是小数（如0.05），需要转换
-        double remainingRiskThreshold = _currentConfig.RemainingRiskValue / 100.0;
+        // 条件固定为 > 0，不读取配置
+        bool checkRealTimeStop = true;
+        bool checkRemainingRisk = true;
+        double realTimeStopThreshold = 0;  // > 0
+        double remainingRiskThreshold = 0; // <= 0 (实际是 > 0 保留)
 
         // 写入详细判定日志
         WriteToLogFile("CHECK", $"========== 开始策略判定 ==========");
         WriteToLogFile("CHECK", $"勾选的策略: {string.Join(", ", enabledStrategies)}");
-        WriteToLogFile("CHECK", $"realTimeStopPriceDiffRate > {realTimeStopThreshold * 100:F2}% (启用: {checkRealTimeStop})");
-        WriteToLogFile("CHECK", $"remainingRisk < {remainingRiskThreshold * 100:F2}% (启用: {checkRemainingRisk})");
+        WriteToLogFile("CHECK", $"realTimeStopPriceDiffRate > 0");
+        WriteToLogFile("CHECK", $"remainingRisk > 0");
 
         // 对每个已勾选的策略分别进行判定
         foreach (var currentStrategy in enabledStrategies)
@@ -1130,13 +1156,13 @@ public partial class GDSignalConfigWindow : Window
 
             WriteToLogFile("CHECK", $"向上判定通过数: {passCount}/{candidateProducts.Count}");
 
-            // 第三步：如果启用了剩余风险检查，过滤品种
+            // 第三步：如果启用了剩余风险检查，过滤品种（remainingRisk > 0 才保留）
             if (checkRemainingRisk && triggeredProducts.Count > 0)
             {
                 WriteToLogFile("CHECK", "");
-                WriteToLogFile("CHECK", $"【第三步】剩余风险检查（remainingRisk < {remainingRiskThreshold * 100:F2}%）:");
+                WriteToLogFile("CHECK", $"【第三步】剩余风险检查（remainingRisk > 0）:");
                 
-                var filteredProducts = triggeredProducts.Where(p => p.RemainingRisk < remainingRiskThreshold).ToList();
+                var filteredProducts = triggeredProducts.Where(p => p.RemainingRisk > 0).ToList();
                 WriteToLogFile("CHECK", $"  通过数: {filteredProducts.Count}/{triggeredProducts.Count}");
                 
                 triggeredProducts = filteredProducts;

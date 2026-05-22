@@ -104,20 +104,22 @@ public class FeishuPushService : IDisposable
         if (pendingMessages.Count == 0)
             return;
 
-        Log("INFO", $"发现 {pendingMessages.Count} 条待处理消息");
+        Log("INFO", $"[扫描] 发现 {pendingMessages.Count} 条待处理消息");
 
         foreach (var message in pendingMessages)
         {
-            Log("INFO", $"[扫描] 处理消息 ID={message.Id}, TerminalId='{message.TerminalId}', Method='{message.Method}', SourceId='{message.SourceId ?? "无"}'");
+            Log("INFO", $"[扫描] 处理消息 ID={message.Id}, TerminalId='{message.TerminalId}', Method='{message.Method}', MessageType='{message.MessageType}', SourceId='{message.SourceId ?? "无"}'");
 
             var terminalConfig = _configService.GetTerminalConfig(message.TerminalId);
 
             if (terminalConfig == null)
             {
-                Log("WARN", $"终端 [{message.TerminalId}] 配置不存在，消息 {message.Id} 标记为失败");
+                Log("WARN", $"[扫描] 终端 [{message.TerminalId}] 配置不存在，消息 {message.Id} 标记为失败");
                 _databaseService.UpdateMessageStatus(message.Id, "Failed", DateTime.Now);
                 continue;
             }
+
+            Log("INFO", $"[扫描] 终端配置检查 - ImageApiKey: {(string.IsNullOrEmpty(terminalConfig.ImageApiKey) ? "未配置" : "已配置")}");
 
             var success = false;
             var errorMsg = "";
@@ -126,10 +128,12 @@ public class FeishuPushService : IDisposable
             {
                 if (message.Method.Equals("text", StringComparison.OrdinalIgnoreCase))
                 {
+                    Log("INFO", $"[扫描] 使用文本消息处理");
                     success = await SendTextMessageWithSourceAsync(message, terminalConfig);
                 }
                 else if (message.Method.Equals("image", StringComparison.OrdinalIgnoreCase))
                 {
+                    Log("INFO", $"[扫描] 使用图片消息处理");
                     success = await SendImageMessageWithSourceAsync(message, terminalConfig);
                 }
                 else
@@ -166,10 +170,10 @@ public class FeishuPushService : IDisposable
         string content;
         
         // GD 策略信号使用 Body 中的内容（已在 GDSignalConfigWindow 中格式化）
-        if (message.MessageType == "GD_Signal" && !string.IsNullOrWhiteSpace(message.Body))
+        if ((message.MessageType == "GD_Signal" || message.MessageType == "GD_Stock_Signal") && !string.IsNullOrWhiteSpace(message.Body))
         {
             content = message.Body;
-            Log("INFO", $"使用 GD 策略消息 Body 作为推送内容");
+            Log("INFO", $"使用 GD 策略消息 Body 作为推送内容 (类型: {message.MessageType})");
         }
         else if (!string.IsNullOrWhiteSpace(message.SourceId))
         {
@@ -197,40 +201,80 @@ public class FeishuPushService : IDisposable
 
     private async Task<bool> SendImageMessageWithSourceAsync(FeishuMessage message, TerminalConfig terminalConfig)
     {
+        Log("INFO", $"[SendImage] 开始处理图片消息，MessageType='{message.MessageType}', SourceId='{message.SourceId ?? "无"}'");
+        
         if (string.IsNullOrWhiteSpace(terminalConfig.ImageApiKey) ||
             string.IsNullOrWhiteSpace(terminalConfig.ImageSecretKey) ||
             string.IsNullOrWhiteSpace(terminalConfig.ImageReceiverId))
         {
-            Log("WARN", $"终端 [{message.TerminalId}] 图片推送配置不完整");
+            Log("WARN", $"[SendImage] 终端 [{message.TerminalId}] 图片推送配置不完整");
+            Log("INFO", $"[SendImage] ImageApiKey: '{(string.IsNullOrEmpty(terminalConfig.ImageApiKey) ? "空" : "有值")}'");
+            Log("INFO", $"[SendImage] ImageSecretKey: '{(string.IsNullOrEmpty(terminalConfig.ImageSecretKey) ? "空" : "有值")}'");
+            Log("INFO", $"[SendImage] ImageReceiverId: '{(string.IsNullOrEmpty(terminalConfig.ImageReceiverId) ? "空" : "有值")}'");
             return false;
         }
 
         byte[]? imageData = null;
         string? textContent = null;
 
-        if (!string.IsNullOrWhiteSpace(message.SourceId))
+        // 特殊处理：股票 GD 信号图片（不使用外部消息源）
+        if (message.MessageType == "GD_Stock_Signal" && string.IsNullOrWhiteSpace(message.SourceId))
         {
-            Log("INFO", $"正在获取消息源 [{message.SourceId}] 数据...");
-            var fetchResult = await _messageSourceService.FetchAndFormatMessageAsync(message.SourceId, "image");
-
-            if (fetchResult.Success)
+            Log("INFO", $"[SendImage] 进入股票 GD 信号图片生成流程");
+            
+            // 从文件读取原始数据
+            var rawData = LoadStockGDData(message.Id);
+            if (!string.IsNullOrEmpty(rawData))
             {
-                // 优先使用生成的图片数据
-                if (fetchResult.ImageData != null && fetchResult.ImageData.Length > 0)
+                Log("INFO", $"[SendImage] 原始数据读取成功，长度: {rawData.Length}");
+                imageData = _imageGenerator.GenerateStockGDSignalImage(rawData, "股票GD信号");
+                if (imageData != null)
                 {
-                    imageData = fetchResult.ImageData;
-                    Log("INFO", $"消息源图片生成成功，图片大小: {imageData.Length} bytes");
+                    Log("INFO", $"[SendImage] 股票 GD 信号图片生成成功，图片大小: {imageData.Length} bytes");
                 }
-                else if (!string.IsNullOrEmpty(fetchResult.FormattedText))
+                else
                 {
-                    textContent = fetchResult.FormattedText;
-                    Log("INFO", $"消息源数据获取成功，使用文字模式");
+                    Log("WARN", $"[SendImage] 股票 GD 信号图片生成返回 null");
+                    textContent = "图片生成失败，请查看文本消息";
                 }
             }
             else
             {
-                Log("ERROR", $"获取消息源数据失败: {fetchResult.ErrorMessage}");
-                textContent = $"获取数据失败: {fetchResult.ErrorMessage}";
+                Log("ERROR", $"[SendImage] 无法读取股票 GD 信号原始数据，文件可能不存在");
+            }
+        }
+        else
+        {
+            Log("INFO", $"[SendImage] 不符合股票 GD 信号条件，MessageType='{message.MessageType}', SourceId='{message.SourceId ?? "无"}'");
+            
+            if (!string.IsNullOrWhiteSpace(message.SourceId))
+            {
+                Log("INFO", $"[SendImage] 使用消息源图片生成，SourceId={message.SourceId}");
+                var fetchResult = await _messageSourceService.FetchAndFormatMessageAsync(message.SourceId, "image");
+
+                if (fetchResult.Success)
+                {
+                    // 优先使用生成的图片数据
+                    if (fetchResult.ImageData != null && fetchResult.ImageData.Length > 0)
+                    {
+                        imageData = fetchResult.ImageData;
+                        Log("INFO", $"[SendImage] 消息源图片生成成功，图片大小: {imageData.Length} bytes");
+                    }
+                    else if (!string.IsNullOrEmpty(fetchResult.FormattedText))
+                    {
+                        textContent = fetchResult.FormattedText;
+                        Log("INFO", $"[SendImage] 消息源数据获取成功，使用文字模式");
+                    }
+                }
+                else
+                {
+                    Log("ERROR", $"[SendImage] 获取消息源数据失败: {fetchResult.ErrorMessage}");
+                    textContent = $"获取数据失败: {fetchResult.ErrorMessage}";
+                }
+            }
+            else
+            {
+                Log("WARN", $"[SendImage] 没有 SourceId 且不是股票 GD 信号，无法生成图片");
             }
         }
 
@@ -242,6 +286,44 @@ public class FeishuPushService : IDisposable
 
         // 否则发送带文字的图片消息（使用占位图）
         return SendImageMessage(terminalConfig, textContent);
+    }
+
+    private string? LoadStockGDData(int messageId)
+    {
+        try
+        {
+            var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var dataDir = Path.Combine(appDataPath, "InfoTransfer", "image_data");
+            var filePath = Path.Combine(dataDir, $"stock_gd_{messageId}.json");
+            Log("INFO", $"[LoadData] 查找文件: {filePath}");
+            
+            if (File.Exists(filePath))
+            {
+                var content = File.ReadAllText(filePath);
+                Log("INFO", $"[LoadData] 文件存在，内容长度: {content.Length}");
+                return content;
+            }
+            
+            Log("WARN", $"[LoadData] 文件不存在: {filePath}");
+            
+            // 列出目录中的文件
+            if (Directory.Exists(dataDir))
+            {
+                var files = Directory.GetFiles(dataDir, "*.json");
+                Log("INFO", $"[LoadData] 目录中的文件: {string.Join(", ", files)}");
+            }
+            else
+            {
+                Log("WARN", $"[LoadData] 目录不存在: {dataDir}");
+            }
+            
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Log("ERROR", $"[LoadData] 读取股票 GD 信号数据失败: {ex.Message}");
+            return null;
+        }
     }
 
     private bool SendTextMessage(string webhook, string content)
